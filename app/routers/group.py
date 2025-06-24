@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, status
+
 from app.db import AsyncSession, get_db
 from app.models.admin import AdminDetails
-from app.models.group import GroupCreate, GroupModify, GroupResponse, GroupsResponse
-from .authentication import check_sudo_admin, get_current
-from app.utils import responses
-from app.operation.group import GroupOperation
+from app.models.group import BulkGroup, GroupCreate, GroupModify, GroupResponse, GroupsResponse
 from app.operation import OperatorType
+from app.operation.group import GroupOperation
+from app.utils import responses
 
+from .authentication import check_sudo_admin, get_current
 
 router = APIRouter(prefix="/api/group", tags=["Groups"], responses={401: responses._401, 403: responses._403})
 group_operator = GroupOperation(OperatorType.API)
@@ -155,4 +156,52 @@ async def remove_group(
         404: Not Found - If group doesn't exist
     """
     await group_operator.remove_group(db, group_id, admin)
+    return {}
+
+
+@router.post(
+    "s/bulk/add",
+    summary="Bulk add groups to users",
+    response_description="Success confirmation",
+)
+async def bulk_add_groups_to_users(
+    bulk_group: BulkGroup, db: AsyncSession = Depends(get_db), _: AdminDetails = Depends(get_current)
+):
+    """
+    Bulk assign groups to multiple users and/or all users under specified admins.
+
+    - **group_ids**: List of group IDs to add (required)
+    - **users**: List of user IDs to receive groups (optional if admins provided)
+    - **admins**: List of admin IDs - groups will be added to all their users (optional if users provided)
+
+    Notes:
+    - Requires either 'users' or 'admins' (or both) to be specified
+    - Existing group-user associations will be skipped (no duplicates created)
+    - Returns empty dict on success (check HTTP status for result)
+    """
+    await group_operator.bulk_add_groups(db, bulk_group)
+    return {}
+
+
+@router.post(
+    "s/bulk/remove",
+    summary="Bulk remove groups from users",
+    response_description="Success confirmation",
+)
+async def bulk_remove_groups_to_users(
+    bulk_group: BulkGroup, db: AsyncSession = Depends(get_db), _: AdminDetails = Depends(get_current)
+):
+    """
+    Bulk remove groups from multiple users and/or all users under specified admins.
+
+    - **group_ids**: List of group IDs to remove (required)
+    - **users**: List of user IDs to remove groups from (optional if admins provided)
+    - **admins**: List of admin IDs - groups will be removed from all their users (optional if users provided)
+
+    Notes:
+    - Requires either 'users' or 'admins' (or both) to be specified
+    - Only existing group-user associations will be removed
+    - Returns empty dict on success (check HTTP status for result)
+    """
+    await group_operator.bulk_remove_groups(db, bulk_group)
     return {}

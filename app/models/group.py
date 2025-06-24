@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .validators import ListValidator
 
@@ -37,3 +37,23 @@ class GroupResponse(Group):
 class GroupsResponse(BaseModel):
     groups: list[GroupResponse]
     total: int
+
+
+class BulkGroup(BaseModel):
+    group_ids: list[int]
+    admins: list[int] = []
+    users: list[int] = []
+
+    @field_validator("admins", "users", mode="before")
+    @classmethod
+    def check_at_least_one_provided(cls, v, values):
+        # Skip if this is not the last field being validated
+        if "admins" not in values.data and "users" not in values.data:
+            return v
+
+        # If we're validating the second field and both are None/empty
+        if (values.data.get("admins") is None or len(values.data.get("admins", [])) == 0) and (
+            v is None or (isinstance(v, list) and len(v) == 0)
+        ):
+            raise ValueError("Either 'admins' or 'users' must be provided (non-empty)")
+        return v
