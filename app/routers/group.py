@@ -168,16 +168,16 @@ async def bulk_add_groups_to_users(
     bulk_group: BulkGroup, db: AsyncSession = Depends(get_db), _: AdminDetails = Depends(get_current)
 ):
     """
-    Bulk assign groups to multiple users and/or all users under specified admins.
+    Bulk assign groups to multiple users, users under specific admins, or all users.
 
     - **group_ids**: List of group IDs to add (required)
-    - **users**: List of user IDs to receive groups (optional if admins provided)
-    - **admins**: List of admin IDs - groups will be added to all their users (optional if users provided)
+    - **users**: Optional list of user IDs to assign the groups to
+    - **admins**: Optional list of admin IDs — their users will be targeted
 
     Notes:
-    - Requires either 'users' or 'admins' (or both) to be specified
-    - Existing group-user associations will be skipped (no duplicates created)
-    - Returns empty dict on success (check HTTP status for result)
+    - If neither 'users' nor 'admins' are provided, groups will be added to *all users*
+    - Existing user-group associations will be ignored (no duplication)
+    - Returns list of affected users (those who received new group associations)
     """
     await group_operator.bulk_add_groups(db, bulk_group)
     return {}
@@ -192,16 +192,16 @@ async def bulk_remove_groups_to_users(
     bulk_group: BulkGroup, db: AsyncSession = Depends(get_db), _: AdminDetails = Depends(get_current)
 ):
     """
-    Bulk remove groups from multiple users and/or all users under specified admins.
+    Bulk remove groups from multiple users, users under specific admins, or all users.
 
     - **group_ids**: List of group IDs to remove (required)
-    - **users**: List of user IDs to remove groups from (optional if admins provided)
-    - **admins**: List of admin IDs - groups will be removed from all their users (optional if users provided)
+    - **users**: Optional list of user IDs to remove the groups from
+    - **admins**: Optional list of admin IDs — their users will be targeted
 
     Notes:
-    - Requires either 'users' or 'admins' (or both) to be specified
-    - Only existing group-user associations will be removed
-    - Returns empty dict on success (check HTTP status for result)
+    - If neither 'users' nor 'admins' are provided, groups will be removed from *all users*
+    - Only existing user-group associations will be removed
+    - Returns list of affected users (those who had groups removed)
     """
     await group_operator.bulk_remove_groups(db, bulk_group)
     return {}
