@@ -11,7 +11,7 @@ from typing import List, Optional, Union
 
 from sqlalchemy import String, and_, delete, func, not_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.functions import coalesce
 
 from app.db.base import DATABASE_DIALECT
@@ -896,27 +896,37 @@ async def update_user_sub(db: AsyncSession, db_user: User, user_agent: str) -> U
 
 async def reset_all_users_data_usage(db: AsyncSession, admin: Optional[Admin] = None):
     """
-    Resets the data usage for all users or users under a specific admin.
+    Efficiently resets data usage for all users, or users under a specific admin if provided.
+
+    This function performs a high-performance reset by executing bulk database operations
+    rather than iterating over ORM-mapped objects, improving speed and reducing memory usage.
+
+    Operations performed:
+        - Sets `used_traffic` to 0 for all target users.
+        - Sets `status` to `active` for all users, unless filtered by admin.
+        - Deletes all related `UserUsageResetLogs`, `NodeUserUsage`, and `NextPlan` entries.
 
     Args:
-        db (AsyncSession): Database session.
-        admin (Optional[Admin]): Admin to filter users by, if any.
+        db (AsyncSession): The SQLAlchemy async session used for database operations.
+        admin (Optional[Admin]): If provided, only resets data usage for users belonging to this admin.
+                                 If None, resets usage for all users in the system.
+
+    Notes:
+        - All operations are executed in bulk for performance.
+        - This function assumes proper foreign key constraints and cascading rules are in place.
+        - The function commits changes at the end of the operation.
     """
-    query = select(User).options(selectinload(User.node_usages))
+    user_ids_query = select(User.id).where(User.admin_id == admin.id) if admin else select(User.id)
+    user_ids = (await db.execute(user_ids_query)).scalars().all()
 
-    if admin:
-        query = query.where(User.admin == admin)
+    if not user_ids:
+        return
 
-    for dbuser in (await db.execute(query)).scalars().all():
-        dbuser.used_traffic = 0
-        if dbuser.status not in [UserStatus.on_hold, UserStatus.expired, UserStatus.disabled]:
-            dbuser.status = UserStatus.active
-        dbuser.usage_logs.clear()
-        dbuser.node_usages.clear()
-        if dbuser.next_plan:
-            await db.delete(dbuser.next_plan)
-            dbuser.next_plan = None
-        await db.add(dbuser)
+    await db.execute(update(User).where(User.id.in_(user_ids)).values(used_traffic=0, status=UserStatus.active))
+
+    await db.execute(delete(UserUsageResetLogs).where(UserUsageResetLogs.user_id.in_(user_ids)))
+    await db.execute(delete(NodeUserUsage).where(NodeUserUsage.user_id.in_(user_ids)))
+    await db.execute(delete(NextPlan).where(NextPlan.user_id.in_(user_ids)))
 
     await db.commit()
 
