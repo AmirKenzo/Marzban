@@ -2119,7 +2119,11 @@ async def bulk_add_groups_to_users(db: AsyncSession, bulk_model: BulkGroup) -> L
     """
     conditions = [users_groups_association.c.groups_id.in_(bulk_model.group_ids)]
 
+    user_ids = set()
+    target_all_users = True
+
     if bulk_model.users or bulk_model.admins:
+        target_all_users = False
         user_ids = await _resolve_target_user_ids(db, bulk_model)
         conditions.append(users_groups_association.c.user_id.in_(user_ids))
 
@@ -2134,6 +2138,10 @@ async def bulk_add_groups_to_users(db: AsyncSession, bulk_model: BulkGroup) -> L
 
     if not existing_pairs:
         return []
+    
+    if target_all_users:
+        result = await db.execute(select(User.id))
+        user_ids = {row[0] for row in result.all()}
 
     # Prepare new associations
     new_rows = [
