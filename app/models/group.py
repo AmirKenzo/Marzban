@@ -41,11 +41,5 @@ class GroupsResponse(BaseModel):
 
 class BulkGroup(BaseModel):
     group_ids: set[int]
-    admins: set[int] = {}
-    users: set[int] = {}
-
-    @field_validator("admins", "users", mode="before")
-    @classmethod
-    def allow_empty(cls, v, values):
-        # Allow empty admins and users for targeting all users
-        return v or set()
+    admins: set[int] = Field(default=set())
+    users: set[int] = Field(default=set())
