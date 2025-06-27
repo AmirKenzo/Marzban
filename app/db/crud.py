@@ -2101,17 +2101,14 @@ async def remove_group(db: AsyncSession, dbgroup: Group):
 async def _resolve_target_user_ids(db: AsyncSession, bulk_model: BulkGroup) -> set[int]:
     """Resolve all user IDs based on users/admins or return all users if unspecified."""
     user_ids = set()
+
     if bulk_model.users:
         result = await db.execute(select(User.id).where(User.id.in_(bulk_model.users)))
-        user_ids.update({row[0] for row in result})
+        user_ids.update({row[0] for row in result.all()})
 
     if bulk_model.admins:
         result = await db.execute(select(User.id).where(User.admin_id.in_(bulk_model.admins)))
-        user_ids.update({uid[0] for uid in result.all()})
-
-    if not bulk_model.users and not bulk_model.admins:
-        result = await db.execute(select(User.id))
-        user_ids.update({uid[0] for uid in result.all()})
+        user_ids.update({row[0] for row in result.all()})
 
     return user_ids
 
@@ -2120,18 +2117,19 @@ async def bulk_add_groups_to_users(db: AsyncSession, bulk_model: BulkGroup) -> L
     """
     Bulk add groups to users and return list of affected User objects.
     """
-    user_ids = await _resolve_target_user_ids(db, bulk_model)
+    conditions = [users_groups_association.c.groups_id.in_(bulk_model.group_ids)]
 
-    if not user_ids:
-        return []
+    if bulk_model.users or bulk_model.admins:
+        user_ids = await _resolve_target_user_ids(db, bulk_model)
+        conditions.append(users_groups_association.c.user_id.in_(user_ids))
 
     # Fetch existing associations
     existing = await db.execute(
         select(users_groups_association).where(
-            users_groups_association.c.groups_id.in_(bulk_model.group_ids),
-            users_groups_association.c.user_id.in_(user_ids),
+            and_(*conditions),
         )
     )
+
     existing_pairs = {(r.user_id, r.groups_id) for r in existing.all()}
 
     # Prepare new associations
@@ -2159,20 +2157,18 @@ async def bulk_remove_groups_from_users(db: AsyncSession, bulk_model: BulkGroup)
     """
     Bulk remove groups from users and return list of affected User objects.
     """
-    user_ids = await _resolve_target_user_ids(db, bulk_model)
+    conditions = [users_groups_association.c.groups_id.in_(bulk_model.group_ids)]
 
-    if not user_ids:
-        return []
+    if bulk_model.users or bulk_model.admins:
+        user_ids = await _resolve_target_user_ids(db, bulk_model)
+        conditions.append(users_groups_association.c.user_id.in_(user_ids))
 
     # Identify affected users
     result = await db.execute(
         select(User)
         .distinct()
         .join(users_groups_association, User.id == users_groups_association.c.user_id)
-        .where(
-            users_groups_association.c.user_id.in_(user_ids),
-            users_groups_association.c.groups_id.in_(bulk_model.group_ids),
-        )
+        .where(and_(*conditions))
     )
     users = result.scalars().all()
 
