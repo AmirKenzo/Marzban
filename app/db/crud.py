@@ -2098,109 +2098,97 @@ async def remove_group(db: AsyncSession, dbgroup: Group):
     await db.commit()
 
 
+async def _resolve_target_user_ids(db: AsyncSession, bulk_model: BulkGroup) -> set[int]:
+    """Resolve all user IDs based on users/admins or return all users if unspecified."""
+    user_ids = set()
+    if bulk_model.users:
+        result = await db.execute(select(User.id).where(User.id.in_(bulk_model.users)))
+        user_ids.update({row[0] for row in result})
+
+    if bulk_model.admins:
+        result = await db.execute(select(User.id).where(User.admin_id.in_(bulk_model.admins)))
+        user_ids.update({uid[0] for uid in result.all()})
+
+    if not bulk_model.users and not bulk_model.admins:
+        result = await db.execute(select(User.id))
+        user_ids.update({uid[0] for uid in result.all()})
+
+    return user_ids
+
+
 async def bulk_add_groups_to_users(db: AsyncSession, bulk_model: BulkGroup) -> List["User"]:
     """
-    Bulk add groups to users and return list of User objects who received new associations
+    Bulk add groups to users and return list of affected User objects.
     """
-    # Get all existing user-group associations to avoid duplicates
-    existing_associations_result = await db.execute(
+    user_ids = await _resolve_target_user_ids(db, bulk_model)
+
+    if not user_ids:
+        return []
+
+    # Fetch existing associations
+    existing = await db.execute(
         select(users_groups_association).where(
-            and_(
-                users_groups_association.c.groups_id.in_(bulk_model.group_ids),
-                users_groups_association.c.user_id.in_(bulk_model.users if bulk_model.users else []),
-            )
+            users_groups_association.c.groups_id.in_(bulk_model.group_ids),
+            users_groups_association.c.user_id.in_(user_ids),
         )
     )
-    existing_pairs = {(assoc.user_id, assoc.groups_id) for assoc in existing_associations_result.all()}
-
-    user_ids: set[int] = set()
-
-    # Add explicitly specified users
-    if bulk_model.users:
-        user_ids.update(bulk_model.users)
-
-    # Add users belonging to specified admins
-    if bulk_model.admins:
-        admin_users_result = await db.execute(select(User.id).where(User.admin_id.in_(bulk_model.admins)))
-        user_ids.update(user_id for (user_id,) in admin_users_result.all())
-
-    # If neither admins nor users specified, apply to all users
-    if not user_ids:
-        all_users_result = await db.execute(select(User.id))
-        user_ids.update(user_id for (user_id,) in all_users_result.all())
+    existing_pairs = {(r.user_id, r.groups_id) for r in existing.all()}
 
     # Prepare new associations
-    new_associations = []
-    updated_user_ids = set()
+    new_rows = [
+        {"user_id": uid, "groups_id": gid}
+        for uid in user_ids
+        for gid in bulk_model.group_ids
+        if (uid, gid) not in existing_pairs
+    ]
 
-    for user_id in user_ids:
-        for group_id in bulk_model.group_ids:
-            if (user_id, group_id) not in existing_pairs:
-                new_associations.append({"user_id": user_id, "groups_id": group_id})
-                updated_user_ids.add(user_id)
+    if not new_rows:
+        return []
 
-    if new_associations:
-        await db.execute(users_groups_association.insert(), new_associations)
-        await db.commit()
+    await db.execute(users_groups_association.insert(), new_rows)
+    await db.commit()
 
-    if updated_user_ids:
-        result = await db.execute(select(User).where(User.id.in_(updated_user_ids)))
-        return result.scalars().all()
-
-    return []
+    result = await db.execute(select(User).where(User.id.in_({r["user_id"] for r in new_rows})))
+    users = result.scalars().all()
+    for user in users:
+        await load_user_attrs(user)
+    return users
 
 
 async def bulk_remove_groups_from_users(db: AsyncSession, bulk_model: BulkGroup) -> List["User"]:
     """
-    Bulk remove groups from users and return list of User objects who had groups removed
+    Bulk remove groups from users and return list of affected User objects.
     """
-    # Get all target user IDs
-    user_ids: set[int] = set()
+    user_ids = await _resolve_target_user_ids(db, bulk_model)
 
-    # Add explicitly specified users
-    if bulk_model.users:
-        user_ids.update(bulk_model.users)
-
-    # Add users belonging to specified admins
-    if bulk_model.admins:
-        admin_users_result = await db.execute(select(User.id).where(User.admin_id.in_(bulk_model.admins)))
-        user_ids.update(user_id for (user_id,) in admin_users_result.all())
-
-    # If neither admins nor users specified, apply to all users
     if not user_ids:
-        all_users_result = await db.execute(select(User.id))
-        user_ids.update(user_id for (user_id,) in all_users_result.all())
+        return []
 
-    # First get the users who actually have these groups (for return value)
-    users_with_groups_result = await db.execute(
+    # Identify affected users
+    result = await db.execute(
         select(User)
         .distinct()
         .join(users_groups_association, User.id == users_groups_association.c.user_id)
         .where(
-            and_(
-                users_groups_association.c.user_id.in_(user_ids),
-                users_groups_association.c.groups_id.in_(bulk_model.group_ids),
-            )
+            users_groups_association.c.user_id.in_(user_ids),
+            users_groups_association.c.groups_id.in_(bulk_model.group_ids),
         )
     )
-    affected_users = users_with_groups_result.scalars().all()
-    affected_user_ids = {user.id for user in affected_users}
+    users = result.scalars().all()
 
-    if not affected_user_ids:
+    if not users:
         return []
 
-    # Perform the bulk deletion
     await db.execute(
         delete(users_groups_association).where(
-            and_(
-                users_groups_association.c.user_id.in_(affected_user_ids),
-                users_groups_association.c.groups_id.in_(bulk_model.group_ids),
-            )
+            users_groups_association.c.user_id.in_([u.id for u in users]),
+            users_groups_association.c.groups_id.in_(bulk_model.group_ids),
         )
     )
     await db.commit()
-
-    return affected_users
+    for user in users:
+        await load_user_attrs(user)
+    return users
 
 
 async def get_core_config_by_id(db: AsyncSession, core_id: int) -> CoreConfig | None:
