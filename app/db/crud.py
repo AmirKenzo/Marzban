@@ -2132,6 +2132,9 @@ async def bulk_add_groups_to_users(db: AsyncSession, bulk_model: BulkGroup) -> L
 
     existing_pairs = {(r.user_id, r.groups_id) for r in existing.all()}
 
+    if not existing_pairs:
+        return []
+
     # Prepare new associations
     new_rows = [
         {"user_id": uid, "groups_id": gid}
