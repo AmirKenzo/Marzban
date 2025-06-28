@@ -20,7 +20,7 @@ from app.db.crud.node import (
     modify_node,
     get_node_stats,
 )
-from app.db.crud.user import     get_user
+from app.db.crud.user import get_user
 from app.db.base import GetDB
 from app.core.manager import core_manager
 from app.node import core_users, node_manager
