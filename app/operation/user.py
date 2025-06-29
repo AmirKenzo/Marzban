@@ -450,7 +450,7 @@ class UserOperation(BaseOperation):
         await asyncio.gather(*[self.update_user(user) for user in users])
 
         return {}
-    
+
     async def bulk_modify_datalimit(self, db: AsyncSession, bulk_model: BulkUser):
         users = await update_users_datalimit(db, bulk_model)
 

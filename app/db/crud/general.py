@@ -34,16 +34,16 @@ def _build_trunc_expression(period: Period, column):
 def get_datetime_add_expression(datetime_column, seconds: int):
     """
     Get database-specific datetime addition expression
-    """    
-    if DATABASE_DIALECT == 'mysql':
-        return func.date_add(datetime_column, text(f'INTERVAL {seconds} SECOND'))
-    elif DATABASE_DIALECT == 'postgresql':
+    """
+    if DATABASE_DIALECT == "mysql":
+        return func.date_add(datetime_column, text("INTERVAL :seconds SECOND").bindparams(seconds=seconds))
+    elif DATABASE_DIALECT == "postgresql":
         return datetime_column + func.make_interval(0, 0, 0, 0, 0, 0, seconds)
-    elif DATABASE_DIALECT == 'sqlite':
-        return func.datetime(datetime_column, f'+{seconds} seconds')
-    
+    elif DATABASE_DIALECT == "sqlite":
+        return func.datetime(datetime_column, f"+{seconds} seconds")
+
     raise ValueError(f"Unsupported dialect: {DATABASE_DIALECT}")
-    
+
 
 def json_extract(column, path: str):
     """

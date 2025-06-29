@@ -289,7 +289,9 @@ async def bulk_modify_users_expire(
     return await user_operator.bulk_modify_expire(db, bulk_model)
 
 
-@router.post("s/bulk/data_limit", summary="Bulk sum/sub to data limit of users", response_description="Success confirmation")
+@router.post(
+    "s/bulk/data_limit", summary="Bulk sum/sub to data limit of users", response_description="Success confirmation"
+)
 async def bulk_modify_users_datalimit(
     bulk_model: BulkUser,
     db: AsyncSession = Depends(get_db),
