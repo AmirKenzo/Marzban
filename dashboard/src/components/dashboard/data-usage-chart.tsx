@@ -1,4 +1,4 @@
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts'
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer, Cell, TooltipProps } from 'recharts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '../ui/card'
 import { ChartConfig, ChartContainer, ChartTooltip } from '../ui/chart'
 import { formatBytes } from '@/utils/formatByte'
@@ -7,6 +7,8 @@ import { useGetUsersUsage, Period } from '@/service/api'
 import { useMemo, useState } from 'react'
 import { SearchXIcon, TrendingUp, TrendingDown } from 'lucide-react'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/select'
+import { dateUtils } from '@/utils/dateFormatter'
+import dayjs from '@/lib/dayjs'
 
 interface PeriodOption {
   label: string
@@ -34,32 +36,28 @@ const transformUsageData = (apiData: any, periodOption: any) => {
   }
 
   return apiData.stats.map((stat: any, index: number, array: any[]) => {
-    // Convert UTC to local time
-    const utcDate = new Date(stat.period_start)
-    const localDate = new Date(utcDate.getTime() + utcDate.getTimezoneOffset() * 60000)
+    const d = dateUtils.toDayjs(stat.period_start)
     const isLastItem = index === array.length - 1
 
     let displayLabel = ''
     if (periodOption.hours) {
-      // For hour periods, show detailed time format
       if (isLastItem) {
         displayLabel = 'Today'
       } else {
-        displayLabel = `${localDate.getMonth() + 1}/${localDate.getDate()} ${localDate.getHours().toString().padStart(2, '0')}:00`
+        displayLabel = d.format('HH:mm')
       }
     } else {
-      // For day periods, show date format
       if (isLastItem) {
         displayLabel = 'Today'
       } else {
-        displayLabel = `${localDate.getMonth() + 1}/${localDate.getDate()}`
+        displayLabel = d.format('MM/DD')
       }
     }
 
     return {
       date: displayLabel,
-      fullDate: stat.period_start, // Keep original UTC date for API consistency
-      localDate: localDate.toISOString(), // Add local date for display
+      fullDate: stat.period_start,
+      localFullDate: d.toISOString(),
       traffic: stat.total_traffic || 0,
     }
   })
@@ -71,6 +69,72 @@ const chartConfig = {
     color: 'hsl(var(--foreground))',
   },
 } satisfies ChartConfig
+
+function CustomBarTooltip({ active, payload, period }: TooltipProps<any, any> & { period?: string }) {
+  const { t, i18n } = useTranslation()
+  if (!active || !payload || !payload.length) return null
+  const data = payload[0].payload
+  const d = dateUtils.toDayjs(data.localFullDate || data.fullDate)
+  const today = dateUtils.toDayjs(new Date())
+  const isToday = d.isSame(today, 'day')
+
+  let formattedDate
+  if (i18n.language === 'fa') {
+    try {
+      if (period === 'day' && isToday) {
+        formattedDate = new Date().toLocaleString('fa-IR', {
+          year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+        }).replace(',', '')
+      } else if (period === 'day') {
+        const localDate = new Date(d.year(), d.month(), d.date(), 0, 0, 0)
+        formattedDate = localDate.toLocaleString('fa-IR', {
+          year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+        }).replace(',', '')
+      } else {
+        formattedDate = d.toDate().toLocaleString('fa-IR', {
+          year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+        }).replace(',', '')
+      }
+    } catch {
+      formattedDate = d.format('YYYY/MM/DD HH:mm')
+    }
+  } else {
+    if (period === 'day' && isToday) {
+      const now = new Date()
+      formattedDate = now.toLocaleString('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+      }).replace(',', '')
+    } else if (period === 'day') {
+      const localDate = new Date(d.year(), d.month(), d.date(), 0, 0, 0)
+      formattedDate = localDate.toLocaleString('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+      }).replace(',', '')
+    } else {
+      formattedDate = d.toDate().toLocaleString('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+      }).replace(',', '')
+    }
+  }
+
+  const isRTL = i18n.language === 'fa'
+
+  return (
+    <div
+      className={`rounded border border-border bg-gradient-to-br from-background to-muted/80 shadow min-w-[160px] text-xs p-2 ${isRTL ? 'text-right' : 'text-left'}`}
+      dir={isRTL ? 'rtl' : 'ltr'}
+    >
+      <div className={`mb-1 font-semibold text-primary text-xs ${isRTL ? 'text-right' : 'text-center'}`}>
+        {t('statistics.date', { defaultValue: 'Date' })}: <span dir="ltr" className="inline-block">{formattedDate}</span>
+      </div>
+      <div className="flex flex-col gap-0.5 text-xs">
+        <div>
+          <span className="font-medium text-foreground">{t('statistics.totalUsage', { defaultValue: 'Total Usage' })}:</span>
+          <span className={isRTL ? 'mr-1' : 'ml-1'}>{formatBytes(data.traffic)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const DataUsageChart = ({ admin_username }: { admin_username?: string }) => {
   const { t, i18n } = useTranslation()
@@ -89,18 +153,16 @@ const DataUsageChart = ({ admin_username }: { admin_username?: string }) => {
   const [periodOption, setPeriodOption] = useState<PeriodOption>(() => PERIOD_OPTIONS[3])
 
   const { startDate, endDate } = useMemo(() => {
-    const now = new Date()
-    let start: Date
+    const now = dayjs()
+    let start: dayjs.Dayjs
     if (periodOption.allTime) {
-      start = new Date('2000-01-01T00:00:00Z') // Arbitrary early date
+      start = dayjs('2000-01-01T00:00:00Z') // Arbitrary early date
     } else if (periodOption.hours) {
-      start = new Date(now)
-      start.setHours(now.getHours() - periodOption.hours)
+      start = now.subtract(periodOption.hours, 'hour')
     } else if (periodOption.days) {
-      start = new Date(now)
-      start.setDate(now.getDate() - periodOption.days)
+      start = now.subtract(periodOption.days, 'day')
     } else {
-      start = new Date(now)
+      start = now
     }
     return { startDate: start.toISOString(), endDate: now.toISOString() }
   }, [periodOption])
@@ -110,7 +172,7 @@ const DataUsageChart = ({ admin_username }: { admin_username?: string }) => {
       ...(admin_username ? { admin: [admin_username] } : {}),
       period: periodOption.period,
       start: startDate,
-      end: endDate,
+      end: dateUtils.toDayjs(endDate).endOf('day').toISOString(),
     },
     {
       query: {
@@ -119,9 +181,18 @@ const DataUsageChart = ({ admin_username }: { admin_username?: string }) => {
     },
   )
 
-  const chartData = useMemo(() => {
-    return transformUsageData(data, periodOption)
-  }, [data, periodOption])
+  // Extract correct stats array from grouped or flat API response (like CostumeBarChart)
+  let statsArr: any[] = []
+  if (data?.stats) {
+    if (typeof data.stats === 'object' && !Array.isArray(data.stats)) {
+      // Use '-1' for all, or first key as fallback
+      statsArr = data.stats['-1'] || data.stats[Object.keys(data.stats)[0]] || []
+    } else if (Array.isArray(data.stats)) {
+      statsArr = data.stats
+    }
+  }
+
+  const chartData = useMemo(() => transformUsageData({ stats: statsArr }, periodOption), [statsArr, periodOption])
 
   // Calculate trend
   const trend = useMemo(() => {
@@ -203,68 +274,8 @@ const DataUsageChart = ({ admin_username }: { admin_username?: string }) => {
                 />
                 <YAxis dataKey={'traffic'} tickLine={false} tickMargin={10} axisLine={false} tickFormatter={val => formatBytes(val, 0, true).toString()} />
                 <ChartTooltip 
-                  cursor={false} 
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      const localDate = data.localDate;
-                      const traffic = data.traffic;
-                      try {
-                        const dateObj = new Date(localDate);
-                        let formattedDate = '';
-                        if (!isNaN(dateObj.getTime())) {
-                          if (i18n.language === 'fa') {
-                            if (periodOption.hours) {
-                              formattedDate = dateObj.toLocaleDateString('fa-IR', {
-                                year: 'numeric',
-                                month: '2-digit',
-                                day: '2-digit',
-                              }) + ' ' + dateObj.toLocaleTimeString('fa-IR', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              });
-                            } else {
-                              formattedDate = dateObj.toLocaleDateString('fa-IR', {
-                                year: 'numeric',
-                                month: '2-digit',
-                                day: '2-digit',
-                              });
-                            }
-                          } else {
-                            if (periodOption.hours) {
-                              formattedDate = dateObj.toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: '2-digit',
-                                day: '2-digit',
-                              }) + ' ' + dateObj.toLocaleTimeString('en-US', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              });
-                            } else {
-                              formattedDate = dateObj.toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: '2-digit',
-                                day: '2-digit',
-                              });
-                            }
-                          }
-                        } else {
-                          formattedDate = data.date;
-                        }
-                        return (
-                          <div className="rounded-lg border border-border bg-background p-3 shadow-lg">
-                            <p className="text-sm font-medium text-center">{formattedDate}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {t('admins.traffic', { defaultValue: 'Traffic' })}: <span className="font-medium text-foreground">{formatBytes(traffic, 2)}</span>
-                            </p>
-                          </div>
-                        );
-                      } catch (error) {
-                        return null;
-                      }
-                    }
-                    return null;
-                  }}
+                  cursor={false}
+                  content={<CustomBarTooltip period={periodOption.period} />}
                 />
                 <Bar dataKey="traffic" radius={6} maxBarSize={48}>
                   {chartData.map((_: any, index: number) => (

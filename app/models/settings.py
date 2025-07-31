@@ -1,8 +1,13 @@
+import re
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .validators import ProxyValidator, DiscordValidator, ListValidator
+from app.models.proxy import ShadowsocksMethods, XTLSFlows
+from .validators import DiscordValidator, ListValidator, ProxyValidator, URLValidator
+
+
+TELEGRAM_TOKEN_PATTERN = r"^\d{8,12}:[A-Za-z0-9_-]{35}$"
 
 
 class Telegram(BaseModel):
@@ -13,11 +18,31 @@ class Telegram(BaseModel):
     proxy_url: str | None = Field(default=None)
 
     mini_app_login: bool = Field(default=True)
+    mini_app_web_url: str | None = Field(default="")
+
+    @field_validator("mini_app_web_url")
+    @classmethod
+    def validate_mini_app_web_url(cls, v):
+        return URLValidator.validate_url(v)
+
+    @field_validator("webhook_url")
+    @classmethod
+    def validate_webhook_url(cls, v):
+        return URLValidator.validate_url(v)
 
     @field_validator("proxy_url")
     @classmethod
     def validate_proxy_url(cls, v):
         return ProxyValidator.validate_proxy_url(v)
+
+    @field_validator("token")
+    @classmethod
+    def token_validation(cls, v):
+        if not v:
+            return v
+        if not re.match(TELEGRAM_TOKEN_PATTERN, v):
+            raise ValueError("Invalid telegram token format")
+        return v
 
     @model_validator(mode="after")
     def check_enable_requires_token_and_url(self):
@@ -170,6 +195,11 @@ class Subscription(BaseModel):
     manual_sub_request: SubFormatEnable = Field(default_factory=SubFormatEnable)
 
 
+class General(BaseModel):
+    default_flow: XTLSFlows = Field(default=XTLSFlows.NONE)
+    default_method: ShadowsocksMethods = Field(default=ShadowsocksMethods.CHACHA20_POLY1305)
+
+
 class SettingsSchema(BaseModel):
     telegram: Telegram | None = Field(default=None)
     discord: Discord | None = Field(default=None)
@@ -177,5 +207,6 @@ class SettingsSchema(BaseModel):
     notification_settings: NotificationSettings | None = Field(default=None)
     notification_enable: NotificationEnable | None = Field(default=None)
     subscription: Subscription | None = Field(default=None)
+    general: General | None = Field(default=None)
 
     model_config = ConfigDict(from_attributes=True)

@@ -1,7 +1,7 @@
 {
   "marzban": "Marzban",
   "dashboard": "Панель управления",
-  "master": "Мастер",
+  "master": "Все узлы",
   "dashboardDescription": "Панель управления Marzban",
   "active": "активный",
   "online": "В сети",
@@ -10,8 +10,21 @@
   "status": "Статус",
   "statistics": "Статистика",
   "selectAll": "Выбрать все",
+  "deselectAll": "Снять выделение со всех",
   "statistics.realTimeStats": "Статистика в реальном времени",
   "statistics.serverPerformance": "Производительность сервера",
+  "statistics.realTimeData": "Данные в реальном времени",
+  "statistics.historicalData": "Исторические данные",
+  "statistics.viewHistorical": "Просмотр истории",
+  "statistics.viewRealtime": "Просмотр в реальном времени",
+  "statistics.historical": "История",
+  "statistics.realtime": "Реальное время",
+  "statistics.realtimeDescription": "Живая статистика и графики для ваших серверов и пользователей.",
+  "statistics.historicalDescription": "Исторические данные о производительности сервера за выбранный период времени",
+  "statistics.date": "Дата",
+  "statistics.totalUsage": "Общий трафик",
+  "statistics.uplink": "Входящий",
+  "statistics.downlink": "Исходящий",
   "hosts": "Хосты",
   "success": "Успешно",
   "error": "Ошибка",
@@ -88,8 +101,8 @@
   "github": "GitHub",
   "community": "Сообщество",
   "supportUs": "Поддержать нас",
-  "manageHosts": "Управление и контроль хостов.",
-  "manageSettings": "Управление и контроль настроек.",
+  "manageHosts": "Управление и контроль хостов",
+  "manageSettings": "Управление и контроль настроек",
   "settings": {
     "title": "Настройки",
     "notifications": {
@@ -131,7 +144,10 @@
         "title": "Расширенные настройки",
         "description": "Настройка расширенного поведения уведомлений, включая политики повторных попыток и настройки прокси",
         "maxRetries": "Максимум повторов",
-        "proxyUrl": "URL прокси"
+        "proxyUrl": "URL прокси",
+        "miniAppUrl": "URL мини-приложения",
+        "miniAppUrlPlaceholder": "Введите URL мини-приложения (необязательно)",
+        "miniAppUrlDescription": "URL вашего мини-приложения Telegram. Оставьте пустым, если не используется."
       }
     },
     "subscriptions": {
@@ -207,7 +223,7 @@
       "saveFailed": "Не удалось сохранить настройки Telegram",
       "cancelSuccess": "Изменения отменены и восстановлены первоначальные настройки Telegram",
       "general": {
-        "title": "Основные настройки",
+        "title": "Общие настройки",
         "description": "Базовая конфигурация Telegram бота и настройки подключения",
         "enable": "Включить бота Telegram",
         "enableDescription": "Включить или отключить функциональность бота Telegram для вашей системы",
@@ -358,6 +374,23 @@
     },
     "theme": {
       "title": "темы"
+    },
+    "general": {
+      "title": "Общие",
+      "description": "Настройте основные параметры системы",
+      "loadError": "Не удалось загрузить общие настройки. Пожалуйста, попробуйте снова.",
+      "saveSuccess": "Общие настройки успешно сохранены",
+      "saveFailed": "Не удалось сохранить общие настройки",
+      "cancelSuccess": "Изменения отменены и исходные настройки восстановлены",
+      "defaultFlow": {
+        "title": "Поток VLESS по умолчанию",
+        "description": "Автоматически заполнять поле потока для новых пользователей VLESS"
+      },
+      "defaultMethod": {
+        "title": "Метод Shadowsocks по умолчанию",
+        "description": "Автоматически заполнять метод шифрования для новых пользователей Shadowsocks"
+      },
+      "errorLoadingSettings": "Ошибка загрузки настроек"
     }
   },
   "saving": "Сохранение...",
@@ -463,7 +496,7 @@
   "userTemplateModal.title": "Создать шаблон пользователя",
   "templates": {
     "title": "Шаблоны",
-    "description": "Управление шаблонами.",
+    "description": "Управление шаблонами",
     "addTemplate": "Создать шаблон",
     "editSuccess": "Шаблон пользователя «{{name}}» успешно обновлен",
     "createSuccess": "Шаблон пользователя «{{name}}» успешно создан",
@@ -491,7 +524,8 @@
     "enableSuccess": "Шаблон «{{name}}» был успешно включён",
     "disableSuccess": "Шаблон «{{name}}» был успешно отключён",
     "enableFailed": "Не удалось включить администратора «{{name}}»",
-    "disableFailed": "Не удалось отключить администратора «{{name}}»"
+    "disableFailed": "Не удалось отключить администратора «{{name}}»",
+    "resetUsages": "Сброс использования"
   },
   "core.configuration": "Конфигурация",
   "core.generalErrorMessage": "Что-то пошло не так, пожалуйста, проверьте конфигурацию",
@@ -563,6 +597,9 @@
   "hostsDialog.fragment.info": "length,interval,packet (e.g. 10-100,100-200,tlshello)",
   "hostsDialog.fragment.info.attention": "Attention: currently, this feature only supported in streisand >= 1.6.12 and v2rayNG >= 1.8.16 (custom config)",
   "hostsDialog.fragment.info.examples": "Examples:",
+  "hostsDialog.fragment.fragment": "Фрагментация",
+  "hostsDialog.fragment.fallbackDelay": "Задержка отката",
+  "hostsDialog.fragment.recordFragment": "Запись фрагмента",
   "hostsDialog.noise": {
     "title": "Шум",
     "addNoise": "Добавить шум",
@@ -660,6 +697,17 @@
   "revokeUserSub.prompt": "Вы уверены, что хотите отозвать подписку для пользователя «{{username}}»?",
   "revokeUserSub.success": "Подписка пользователя {{username}} успешно отозвана.",
   "revokeUserSub.title": "Отозвать подписку пользователя",
+  "subscriptionClients": {
+    "title": "Клиенты подписки",
+    "viewAllClients": "Показать клиентов",
+    "total": "Всего: {{count}} клиентов",
+    "showing": "Показано последних {{count}} обращений",
+    "noClients": "Клиенты подписки не найдены",
+    "noClientsDesc": "Этот пользователь ещё не обращался к своей подписке",
+    "knownClient": "Известный",
+    "unknown": "Неизвестно",
+    "error": "Не удалось загрузить клиентов подписки"
+  },
   "search": "Поиск",
   "status.active": "Active",
   "status.enable": "Enable",
@@ -775,6 +823,9 @@
     "muxEnable": "Включить MUX",
     "randomUserAgent": "Использовать случайный User-Agent",
     "useSniAsHost": "Использовать SNI как хост",
+    "echConfigList": "Список конфигураций ECH",
+    "echConfigList.info": "Список конфигураций Encrypted Client Hello (ECH). Это строка, закодированная в base64.",
+    "echConfigListPlaceholder": "Введите список конфигураций ECH",
     "inboundDefault": "По умолчанию",
     "earlyData": "Ранние данные",
     "httpHeaders": "HTTP заголовки",
@@ -891,10 +942,10 @@
       "expire_date": "Дата истечения срока",
       "jalali_expire_date": "Дата истечения срока по солнечному календарю",
       "time_left": "Оставшееся время",
-      "status_text": "Статус пользователя",
       "status_emoji": "Статус пользователя в виде эмодзи (✅,⌛️,🪫,❌,🔌)",
       "protocol": "Протокол прокси (например, VMess)",
-      "transport": "Метод транспорта прокси (например, ws)"
+      "transport": "Метод транспорта прокси (например, ws)",
+      "admin_username": "Имя пользователя администратора"
     },
     "httpVersions": {
       "1.0": "HTTP/1.0",
@@ -998,7 +1049,8 @@
     "enableSuccess": "Группа «{{name}}» успешно включена",
     "enableFailed": "Не удалось включить группу «{{name}}»",
     "disableSuccess": "Группа «{{name}}» успешно отключена",
-    "disableFailed": "Не удалось отключить группу «{{name}}»"
+    "disableFailed": "Не удалось отключить группу «{{name}}»",
+    "deleteConfirmation": "Удалить группу"
   },
   "name": "Имя",
   "nodeModal": {
@@ -1207,6 +1259,9 @@
     "selectStatus": "Выберите статус",
     "selectedTemplates": "Выбрано шаблонов: {{count}}"
   },
+  "userSettings": {
+    "subscriptionUrlCopied": "URL подписки скопирован в буфер обмена"
+  },
   "sidebar.expand": "Развернуть меню",
   "sidebar.collapse": "Свернуть меню",
   "usersTable.deleteUserTitle": "Удалить пользователя",
@@ -1263,6 +1318,8 @@
     "hours": "часа",
     "min": "мин",
     "mins": "мин",
+    "second": "секунда",
+    "seconds": "секунды",
     "ago": "назад"
   },
   "notConnectedYet": "Еще не подключен",
@@ -1288,7 +1345,10 @@
         "description": "Начните с создания первой учетной записи пользователя",
         "createFirstUser": "Создать первого пользователя"
       }
-    }
+    },
+    "activeNextPlanTitle": "Активировать следующий план пользователя",
+    "activeNextPlanPrompt": "Вы уверены, что хотите активировать следующий план для «{{name}}»?",
+    "activeNextPlanSubmit": "Активировать следующий план"
   },
   "setOwnerModal": {
     "title": "Назначить владельца",
@@ -1300,7 +1360,108 @@
     "error": "Не удалось изменить владельца пользователя {{username}} на {{admin}}.",
     "loadError": "Не удалось загрузить список администраторов."
   },
+  "bulk": {
+    "title": "Массовые операции",
+    "groups": "Группы",
+    "proxySettings": "Настройки прокси",
+    "proxySettingsDesc": "Настройте параметры прокси для применения",
+    "applyToProxyDesc": "Выберите группы, пользователей или администраторов для применения настроек прокси",
+    "flowMethod": "Поток: {{flow}} | Метод: {{method}}",
+    "expireDate": "Дата истечения",
+    "dataLimit": "Лимит данных",
+    "groupsDesc": "Управление назначением групп для нескольких пользователей и администраторов одновременно. Добавление или удаление групп массово.",
+    "expireDateDesc": "Выберите дату истечения срока действия для применения",
+    "applyToExpireDesc": "Выберите группы, пользователей или администраторов для применения даты истечения срока действия",
+    "noDateSelected": "Дата не выбрана",
+    "dataLimitDesc": "Настройка лимитов данных для нескольких пользователей и администраторов одновременно.",
+    "selectFlow": "Выбрать Flow",
+    "selectMethod": "Выбрать Method",
+    "applyChanges": "Применить изменения",
+    "applyDescription": "Применить выбранные назначения групп и настройки к выбранным пользователям и администраторам.",
+    "addGroupsToUsers": "Добавить группы к пользователям",
+    "removeGroupsFromUsers": "Удалить группы у пользователей",
+    "confirmAddGroupsTitle": "Подтвердить добавление групп",
+    "confirmAddGroupsDescription": "Вы уверены, что хотите добавить {{totalGroups}} групп(ы) к {{totalTargets}} целям? Это действие назначит выбранные группы всем выбранным пользователям и администраторам.",
+    "confirmRemoveGroupsTitle": "Подтвердить удаление групп",
+    "confirmRemoveGroupsDescription": "Вы уверены, что хотите удалить {{totalGroups}} групп(ы) у {{totalTargets}} целей? Это действие удалит выбранные группы у всех выбранных пользователей и администраторов.",
+    "applySettings": "Применить настройки",
+    "settingsConfigured": "Настройки сконфигурированы",
+    "noSettings": "Нет настроек",
+    "searchGroups": "Поиск групп...",
+    "searchHasGroups": "Поиск существующих групп...",
+    "searchUsers": "Поиск пользователей...",
+    "searchAdmins": "Поиск администраторов...",
+    "selectGroups": "Выбрать группы",
+    "selectHasGroups": "Выбрать существующие группы",
+    "selectUsers": "Выбрать пользователей",
+    "selectAdmins": "Выбрать администраторов",
+    "expireDateLabel": "Дата истечения",
+    "expireDateRequired": "Пожалуйста, выберите дату истечения.",
+    "selectExpireDate": "Выберите дату истечения",
+    "applyExpireDate": "Применить дату истечения",
+    "applyExpireDescription": "Применить выбранную дату истечения к выбранным группам, пользователям и администраторам.",
+    "confirmApplyExpireTitle": "Подтвердить применение даты истечения",
+    "confirmApplyExpireDescription": "Вы уверены, что хотите применить дату истечения срока {{expireDate}} к {{totalTargets}} выбранным объектам? Это обновит дату истечения срока для всех выбранных групп, пользователей и администраторов.",
+    "insertExpireDatePlaceholder": "Введите дату истечения",
+    "dataLimitLabel": "Лимит данных (ГБ)",
+    "dataLimitPlaceholder": "Введите лимит данных в ГБ",
+    "dataLimitRequired": "Пожалуйста, введите действительный лимит данных.",
+    "applyDataLimit": "Применить лимит данных",
+    "applyDataLimitDescription": "Применить выбранный лимит данных к выбранным группам, пользователям и администраторам.",
+    "confirmApplyDataLimitTitle": "Подтвердить применение лимита данных",
+    "confirmApplyDataLimitDescription": "Вы уверены, что хотите применить лимит данных {{dataLimit}} ГБ к {{totalTargets}} целям? Это действие обновит лимит данных для всех выбранных групп, пользователей и администраторов.",
+    "insertDataLimitPlaceholder": "Введите лимит данных",
+    "flowLabel": "Flow",
+    "methodLabel": "Method",
+    "selectFlowPlaceholder": "Выберите flow",
+    "selectMethodPlaceholder": "Выберите method",
+    "proxySettingsRequired": "Пожалуйста, выберите хотя бы одну настройку прокси (Flow или Method).",
+    "applyProxySettings": "Применить настройки прокси",
+    "applyProxyDescription": "Применить выбранные настройки прокси к выбранным группам, пользователям и администраторам.",
+    "confirmApplyProxyTitle": "Подтвердить применение настроек прокси",
+    "confirmApplyProxyDescription": "Вы уверены, что хотите применить настройки прокси к {{totalTargets}} целям? Это действие обновит настройки прокси для всех выбранных групп, пользователей и администраторов.",
+    "noTargetsSelected": "Пожалуйста, выберите хотя бы одну цель.",
+    "selectedCount": "Выбрано: {{count}}",
+    "groupsCount": "{{count}} групп",
+    "targetsCount": "{{count}} целей",
+    "applyTo": "Применить к",
+    "applyToDesc": "Выберите пользователя или администратора для применения настроек",
+    "operationType": "Тип операции",
+    "groupsOperationDesc": "Выберите, добавлять или удалять группы у пользователей.",
+    "addGroups": "Добавить группы",
+    "removeGroups": "Удалить группы",
+    "addExpiry": "Добавить к сроку действия",
+    "subtractExpiry": "Вычесть из срока действия",
+    "addDataLimit": "Добавить лимит данных",
+    "subtractDataLimit": "Вычесть лимит данных",
+    "applyToDataLimitDesc": "Выберите группы, пользователей или администраторов для применения лимита данных",
+    "noLimitSet": "Лимит не установлен",
+    "confirmApplyExpireDescriptionAll": "Вы уверены, что хотите применить дату истечения срока {{expireDate}} ко ВСЕМ пользователям, администраторам и группам? Это обновит дату истечения срока для всех.",
+    "confirmApplyDataLimitDescriptionAll": "Вы уверены, что хотите применить лимит данных {{dataLimit}} ГБ ко ВСЕМ пользователям, администраторам и группам? Это обновит лимит данных для всех.",
+    "confirmApplyProxyDescriptionAll": "Вы уверены, что хотите применить настройки прокси ко ВСЕМ пользователям, администраторам и группам? Это обновит настройки прокси для всех.",
+    "confirmApplyGroupsDescriptionAll": "Вы уверены, что хотите применить изменения групп ко ВСЕМ пользователям, администраторам и группам? Это обновит группы для всех.",
+    "confirmApplyGroupsDescription": "Вы уверены, что хотите применить изменения групп к {{totalTargets}} выбранным объектам? Это обновит группы для всех выбранных пользователей и администраторов.",
+    "expire.placeholder": "Введите дату истечения"
+  },
+  "operationSuccess": "Операция выполнена успешно!",
+  "operationFailed": "Операция не удалась!",
+  "settingsApplied": "Настройки применены успешно!",
+  "applying": "Применение...",
   "inboundTags": "Входящие теги",
   "searchInbounds": "Поиск входящих...",
-  "noInboundsFound": "Входящие не найдены"
+  "noInboundsFound": "Входящие не найдены",
+  "timeSelector.pickDate": "Выбрать дату",
+  "advanceSearch": {
+    "title": "Расширенный поиск",
+    "byUsername": "Имя пользователя и заметки",
+    "byProtocol": "Данные протокола",
+    "byStatus": "Статус",
+    "byAdmin": "Администратор",
+    "byGroup": "Группа",
+    "selectGroup": "Выберите группу ...",
+    "selectAdmin": "Выберите администратора ...",
+    "selectStatus": "Выберите статус ..."
+  },
+  "clearAllFilters": "Очистить все фильтры",
+  "activeFilters": "активных"
 }

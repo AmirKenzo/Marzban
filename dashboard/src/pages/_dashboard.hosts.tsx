@@ -68,6 +68,7 @@ export default function HostsPage() {
                 priority,
                 alpn: formData.alpn as ProxyHostALPN | undefined,
                 fingerprint: formData.fingerprint as ProxyHostFingerprint | undefined,
+                ech_config_list: formData.ech_config_list || undefined,
                 mux_settings: allProtocolsNone
                     ? undefined
                     : formData.mux_settings
@@ -104,17 +105,31 @@ export default function HostsPage() {
                                 : undefined,
                         }
                         : undefined,
-                fragment_settings: formData.fragment_settings
-                    ? {
-                        xray: formData.fragment_settings.xray
-                            ? {
-                                packets: formData.fragment_settings.xray.packets || '',
-                                length: formData.fragment_settings.xray.length || '',
-                                interval: formData.fragment_settings.xray.interval || '',
-                            }
-                            : undefined,
+                fragment_settings: (() => {
+                    const xraySettings = formData.fragment_settings?.xray
+                        ? {
+                            packets: formData.fragment_settings.xray.packets || undefined,
+                            length: formData.fragment_settings.xray.length || undefined,
+                            interval: formData.fragment_settings.xray.interval || undefined,
+                        }
+                        : undefined
+
+                    const singboxSettings = formData.fragment_settings?.sing_box?.fragment
+                        ? {
+                            fragment: formData.fragment_settings.sing_box.fragment,
+                            fragment_fallback_delay: formData.fragment_settings.sing_box.fragment_fallback_delay || undefined,
+                            record_fragment: formData.fragment_settings.sing_box.record_fragment || undefined,
+                        }
+                        : undefined
+
+                    if (xraySettings || singboxSettings) {
+                        return {
+                            xray: xraySettings,
+                            sing_box: singboxSettings,
+                        }
                     }
-                    : undefined,
+                    return undefined
+                })(),
             }
 
             if (editingHost?.id) {

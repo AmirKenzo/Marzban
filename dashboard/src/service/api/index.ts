@@ -3,7 +3,7 @@
  * Do not edit manually.
  * MarzbanAPI
  * Unified GUI Censorship Resistant Solution Powered by Xray
- * OpenAPI spec version: 1.0.0-alpha-6
+ * OpenAPI spec version: 1.0.0-beta-2
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
@@ -33,11 +33,13 @@ export type GetSubUserUsageParams = {
 }
 
 export type DeleteExpiredUsersParams = {
+  admin_username?: string | null
   expired_after?: string | null
   expired_before?: string | null
 }
 
 export type GetExpiredUsersParams = {
+  admin_username?: string | null
   expired_after?: string | null
   expired_before?: string | null
 }
@@ -45,6 +47,7 @@ export type GetExpiredUsersParams = {
 export type GetUsersUsageParams = {
   period: Period
   node_id?: number | null
+  group_by_node?: boolean
   start?: string | null
   end?: string | null
   admin?: string[] | null
@@ -53,6 +56,7 @@ export type GetUsersUsageParams = {
 export type GetUserUsageParams = {
   period: Period
   node_id?: number | null
+  group_by_node?: boolean
   start?: string | null
   end?: string | null
 }
@@ -68,6 +72,11 @@ export type GetUsersParams = {
   sort?: string | null
   proxy_id?: string | null
   load_sub?: boolean
+}
+
+export type GetUserSubUpdateListParams = {
+  offset?: number
+  limit?: number
 }
 
 export type SetOwnerParams = {
@@ -106,6 +115,7 @@ export type GetUsageParams = {
   end?: string | null
   period?: Period
   node_id?: number | null
+  group_by_node?: boolean
 }
 
 export type GetHostsParams = {
@@ -141,6 +151,10 @@ export type GetAdminsParams = {
   limit?: number | null
 }
 
+export type GetManifestParams = {
+  start_url?: string | null
+}
+
 export interface XrayNoiseSettings {
   /** @pattern ^(:?rand|str|base64|hex)$ */
   type: string
@@ -149,15 +163,26 @@ export interface XrayNoiseSettings {
   delay: string
 }
 
-export type XrayMuxSettingsXudpConcurrency = number | null
+export type XrayMuxSettingsOutputXudpConcurrency = number | null
 
-export type XrayMuxSettingsConcurrency = number | null
+export type XrayMuxSettingsOutputConcurrency = number | null
 
-export interface XrayMuxSettings {
+export interface XrayMuxSettingsOutput {
   enable?: boolean
-  concurrency?: XrayMuxSettingsConcurrency
-  xudp_concurrency?: XrayMuxSettingsXudpConcurrency
-  xudp_proxy_443?: Xudp
+  concurrency?: XrayMuxSettingsOutputConcurrency
+  xudpConcurrency?: XrayMuxSettingsOutputXudpConcurrency
+  xudpProxyUDP443?: Xudp
+}
+
+export type XrayMuxSettingsInputXudpConcurrency = number | null
+
+export type XrayMuxSettingsInputConcurrency = number | null
+
+export interface XrayMuxSettingsInput {
+  enable?: boolean
+  concurrency?: XrayMuxSettingsInputConcurrency
+  xudp_concurrency?: XrayMuxSettingsInputXudpConcurrency
+  xudp_proxy_udp_443?: Xudp
 }
 
 export interface XrayFragmentSettings {
@@ -199,12 +224,12 @@ export type XMuxSettingsOutputMaxConnections = string | null
 export type XMuxSettingsOutputMaxConcurrency = string | null
 
 export interface XMuxSettingsOutput {
-  max_concurrency?: XMuxSettingsOutputMaxConcurrency
-  max_connections?: XMuxSettingsOutputMaxConnections
-  c_max_reuse_times?: XMuxSettingsOutputCMaxReuseTimes
-  c_max_lifetime?: XMuxSettingsOutputCMaxLifetime
-  h_max_request_times?: XMuxSettingsOutputHMaxRequestTimes
-  h_keep_alive_period?: XMuxSettingsOutputHKeepAlivePeriod
+  maxConcurrency?: XMuxSettingsOutputMaxConcurrency
+  maxConnections?: XMuxSettingsOutputMaxConnections
+  cMaxReuseTimes?: XMuxSettingsOutputCMaxReuseTimes
+  cMaxLifetime?: XMuxSettingsOutputCMaxLifetime
+  hMaxRequestTimes?: XMuxSettingsOutputHMaxRequestTimes
+  hKeepAlivePeriod?: XMuxSettingsOutputHKeepAlivePeriod
 }
 
 export type XMuxSettingsInputHKeepAlivePeriod = string | number | null
@@ -232,10 +257,6 @@ export type XHttpSettingsOutputDownloadSettings = number | null
 
 export type XHttpSettingsOutputXmux = XMuxSettingsOutput | null
 
-export type XHttpSettingsOutputScStreamUpServerSecs = string | null
-
-export type XHttpSettingsOutputScMaxBufferedPosts = string | null
-
 export type XHttpSettingsOutputScMinPostsIntervalMs = string | null
 
 export type XHttpSettingsOutputScMaxEachPostBytes = string | null
@@ -244,25 +265,9 @@ export type XHttpSettingsOutputXPaddingBytes = string | null
 
 export type XHttpSettingsOutputNoGrpcHeader = boolean | null
 
-export interface XHttpSettingsOutput {
-  mode?: XHttpModes
-  no_grpc_header?: XHttpSettingsOutputNoGrpcHeader
-  x_padding_bytes?: XHttpSettingsOutputXPaddingBytes
-  sc_max_each_post_bytes?: XHttpSettingsOutputScMaxEachPostBytes
-  sc_min_posts_interval_ms?: XHttpSettingsOutputScMinPostsIntervalMs
-  sc_max_buffered_posts?: XHttpSettingsOutputScMaxBufferedPosts
-  sc_stream_up_server_secs?: XHttpSettingsOutputScStreamUpServerSecs
-  xmux?: XHttpSettingsOutputXmux
-  download_settings?: XHttpSettingsOutputDownloadSettings
-}
-
 export type XHttpSettingsInputDownloadSettings = number | null
 
 export type XHttpSettingsInputXmux = XMuxSettingsInput | null
-
-export type XHttpSettingsInputScStreamUpServerSecs = string | number | null
-
-export type XHttpSettingsInputScMaxBufferedPosts = string | number | null
 
 export type XHttpSettingsInputScMinPostsIntervalMs = string | number | null
 
@@ -282,14 +287,22 @@ export const XHttpModes = {
   'stream-one': 'stream-one',
 } as const
 
+export interface XHttpSettingsOutput {
+  mode?: XHttpModes
+  no_grpc_header?: XHttpSettingsOutputNoGrpcHeader
+  x_padding_bytes?: XHttpSettingsOutputXPaddingBytes
+  sc_max_each_post_bytes?: XHttpSettingsOutputScMaxEachPostBytes
+  sc_min_posts_interval_ms?: XHttpSettingsOutputScMinPostsIntervalMs
+  xmux?: XHttpSettingsOutputXmux
+  download_settings?: XHttpSettingsOutputDownloadSettings
+}
+
 export interface XHttpSettingsInput {
   mode?: XHttpModes
   no_grpc_header?: XHttpSettingsInputNoGrpcHeader
   x_padding_bytes?: XHttpSettingsInputXPaddingBytes
   sc_max_each_post_bytes?: XHttpSettingsInputScMaxEachPostBytes
   sc_min_posts_interval_ms?: XHttpSettingsInputScMinPostsIntervalMs
-  sc_max_buffered_posts?: XHttpSettingsInputScMaxBufferedPosts
-  sc_stream_up_server_secs?: XHttpSettingsInputScStreamUpServerSecs
   xmux?: XHttpSettingsInputXmux
   download_settings?: XHttpSettingsInputDownloadSettings
 }
@@ -343,17 +356,19 @@ export interface UsersResponse {
 
 export type UserUsageStatsListPeriod = Period | null
 
+export interface UserUsageStatsList {
+  period?: UserUsageStatsListPeriod
+  start: string
+  end: string
+  stats: UserUsageStatsListStats
+}
+
 export interface UserUsageStat {
   total_traffic: number
   period_start: string
 }
 
-export interface UserUsageStatsList {
-  period?: UserUsageStatsListPeriod
-  start: string
-  end: string
-  stats: UserUsageStat[]
-}
+export type UserUsageStatsListStats = { [key: string]: UserUsageStat[] }
 
 export type UserTemplateResponseIsDisabled = boolean | null
 
@@ -487,6 +502,16 @@ export interface UserTemplateCreate {
   is_disabled?: UserTemplateCreateIsDisabled
 }
 
+export interface UserSubscriptionUpdateSchema {
+  created_at: string
+  user_agent: string
+}
+
+export interface UserSubscriptionUpdateList {
+  updates?: UserSubscriptionUpdateSchema[]
+  count: number
+}
+
 export type UserStatusModify = (typeof UserStatusModify)[keyof typeof UserStatusModify]
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
@@ -519,9 +544,7 @@ export type UserResponseAdmin = AdminBase | null
 
 export type UserResponseOnlineAt = string | null
 
-export type UserResponseSubLastUserAgent = string | null
-
-export type UserResponseSubUpdatedAt = string | null
+export type UserResponseEditAt = string | null
 
 export type UserResponseNextPlan = NextPlanModel | null
 
@@ -534,8 +557,6 @@ export type UserResponseOnHoldTimeout = string | number | null
 export type UserResponseOnHoldExpireDuration = number | null
 
 export type UserResponseNote = string | null
-
-export type UserResponseDataLimitResetStrategy = UserDataLimitResetStrategy | null
 
 /**
  * data_limit can be 0 or greater
@@ -562,8 +583,7 @@ export interface UserResponse {
   used_traffic: number
   lifetime_used_traffic?: number
   created_at: string
-  sub_updated_at?: UserResponseSubUpdatedAt
-  sub_last_user_agent?: UserResponseSubLastUserAgent
+  edit_at?: UserResponseEditAt
   online_at?: UserResponseOnlineAt
   subscription_url?: string
   admin?: UserResponseAdmin
@@ -590,20 +610,7 @@ export type UserModifyDataLimit = number | null
 
 export type UserModifyExpire = string | number | null
 
-export interface UserModify {
-  proxy_settings?: ProxyTableInput
-  expire?: UserModifyExpire
-  /** data_limit can be 0 or greater */
-  data_limit?: UserModifyDataLimit
-  data_limit_reset_strategy?: UserModifyDataLimitResetStrategy
-  note?: UserModifyNote
-  on_hold_expire_duration?: UserModifyOnHoldExpireDuration
-  on_hold_timeout?: UserModifyOnHoldTimeout
-  group_ids?: UserModifyGroupIds
-  auto_delete_in_days?: UserModifyAutoDeleteInDays
-  next_plan?: UserModifyNextPlan
-  status?: UserModifyStatus
-}
+export type UserModifyProxySettings = ProxyTableInput | null
 
 export type UserDataLimitResetStrategy = (typeof UserDataLimitResetStrategy)[keyof typeof UserDataLimitResetStrategy]
 
@@ -616,7 +623,24 @@ export const UserDataLimitResetStrategy = {
   year: 'year',
 } as const
 
+export type UserResponseDataLimitResetStrategy = UserDataLimitResetStrategy | null
+
 export type UserModifyDataLimitResetStrategy = UserDataLimitResetStrategy | null
+
+export interface UserModify {
+  proxy_settings?: UserModifyProxySettings
+  expire?: UserModifyExpire
+  /** data_limit can be 0 or greater */
+  data_limit?: UserModifyDataLimit
+  data_limit_reset_strategy?: UserModifyDataLimitResetStrategy
+  note?: UserModifyNote
+  on_hold_expire_duration?: UserModifyOnHoldExpireDuration
+  on_hold_timeout?: UserModifyOnHoldTimeout
+  group_ids?: UserModifyGroupIds
+  auto_delete_in_days?: UserModifyAutoDeleteInDays
+  next_plan?: UserModifyNextPlan
+  status?: UserModifyStatus
+}
 
 export type UserCreateStatus = UserStatusCreate | null
 
@@ -714,6 +738,8 @@ export interface Token {
   token_type?: string
 }
 
+export type TelegramMiniAppWebUrl = string | null
+
 export type TelegramProxyUrl = string | null
 
 export type TelegramWebhookSecret = string | null
@@ -729,6 +755,7 @@ export interface Telegram {
   webhook_secret?: TelegramWebhookSecret
   proxy_url?: TelegramProxyUrl
   mini_app_login?: boolean
+  mini_app_web_url?: TelegramMiniAppWebUrl
 }
 
 export type TcpSettingsResponse = HTTPResponse | null
@@ -769,9 +796,7 @@ export interface SystemStats {
 
 export type SubscriptionUserResponseOnlineAt = string | null
 
-export type SubscriptionUserResponseSubLastUserAgent = string | null
-
-export type SubscriptionUserResponseSubUpdatedAt = string | null
+export type SubscriptionUserResponseEditAt = string | null
 
 export type SubscriptionUserResponseNextPlan = NextPlanModel | null
 
@@ -806,8 +831,7 @@ export interface SubscriptionUserResponse {
   used_traffic: number
   lifetime_used_traffic?: number
   created_at: string
-  sub_updated_at?: SubscriptionUserResponseSubUpdatedAt
-  sub_last_user_agent?: SubscriptionUserResponseSubLastUserAgent
+  edit_at?: SubscriptionUserResponseEditAt
   online_at?: SubscriptionUserResponseOnlineAt
 }
 
@@ -864,6 +888,13 @@ export interface SingBoxMuxSettings {
   brutal?: SingBoxMuxSettingsBrutal
 }
 
+export interface SingBoxFragmentSettings {
+  fragment?: boolean
+  /** @pattern ^$|^\d+ms$ */
+  fragment_fallback_delay?: string
+  record_fragment?: boolean
+}
+
 export type ShadowsocksMethods = (typeof ShadowsocksMethods)[keyof typeof ShadowsocksMethods]
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
@@ -879,6 +910,13 @@ export interface ShadowsocksSettings {
   password?: string
   method?: ShadowsocksMethods
 }
+
+export interface General {
+  default_flow?: XTLSFlows
+  default_method?: ShadowsocksMethods
+}
+
+export type SettingsSchemaOutputGeneral = General | null
 
 export type SettingsSchemaOutputSubscription = SubscriptionOutput | null
 
@@ -899,9 +937,14 @@ export interface SettingsSchemaOutput {
   notification_settings?: SettingsSchemaOutputNotificationSettings
   notification_enable?: SettingsSchemaOutputNotificationEnable
   subscription?: SettingsSchemaOutputSubscription
+  general?: SettingsSchemaOutputGeneral
 }
 
+export type SettingsSchemaInputGeneral = General | null
+
 export type SettingsSchemaInputSubscription = SubscriptionInput | null
+
+export type SettingsSchemaInputNotificationEnable = NotificationEnable | null
 
 export type SettingsSchemaInputNotificationSettings = NotificationSettings | null
 
@@ -918,6 +961,7 @@ export interface SettingsSchemaInput {
   notification_settings?: SettingsSchemaInputNotificationSettings
   notification_enable?: SettingsSchemaInputNotificationEnable
   subscription?: SettingsSchemaInputSubscription
+  general?: SettingsSchemaInputGeneral
 }
 
 export interface RemoveUsersResponse {
@@ -963,6 +1007,8 @@ export const ProxyHostFingerprint = {
   qq: 'qq',
   random: 'random',
   randomized: 'randomized',
+  randomizednoalpn: 'randomizednoalpn',
+  unsafe: 'unsafe',
 } as const
 
 export type ProxyHostALPN = (typeof ProxyHostALPN)[keyof typeof ProxyHostALPN]
@@ -1026,8 +1072,6 @@ export interface NotificationEnable {
   percentage_reached?: boolean
 }
 
-export type SettingsSchemaInputNotificationEnable = NotificationEnable | null
-
 export interface NotFound {
   detail?: string
 }
@@ -1046,11 +1090,13 @@ export interface NodeUsageStat {
   period_start: string
 }
 
+export type NodeUsageStatsListStats = { [key: string]: NodeUsageStat[] }
+
 export interface NodeUsageStatsList {
   period?: NodeUsageStatsListPeriod
   start: string
   end: string
-  stats: NodeUsageStat[]
+  stats: NodeUsageStatsListStats
 }
 
 export type NodeStatus = (typeof NodeStatus)[keyof typeof NodeStatus]
@@ -1140,6 +1186,8 @@ export type NodeModifyKeepAlive = number | null
 
 export type NodeModifyServerCa = string | null
 
+export type NodeModifyConnectionType = NodeConnectionType | null
+
 export type NodeModifyUsageCoefficient = number | null
 
 export type NodeModifyPort = number | null
@@ -1172,8 +1220,6 @@ export const NodeConnectionType = {
   rest: 'rest',
 } as const
 
-export type NodeModifyConnectionType = NodeConnectionType | null
-
 export interface NodeCreate {
   name: string
   address: string
@@ -1203,7 +1249,7 @@ export interface NextPlanModel {
   add_remaining_traffic?: boolean
 }
 
-export type MuxSettingsOutputXray = XrayMuxSettings | null
+export type MuxSettingsOutputXray = XrayMuxSettingsOutput | null
 
 export type MuxSettingsOutputClash = ClashMuxSettings | null
 
@@ -1215,7 +1261,7 @@ export interface MuxSettingsOutput {
   xray?: MuxSettingsOutputXray
 }
 
-export type MuxSettingsInputXray = XrayMuxSettings | null
+export type MuxSettingsInputXray = XrayMuxSettingsInput | null
 
 export type MuxSettingsInputClash = ClashMuxSettings | null
 
@@ -1303,6 +1349,8 @@ export interface HTTPException {
   detail: string
 }
 
+export type GroupResponseInboundTags = string[] | null
+
 export interface GroupResponse {
   /**
    * @minLength 3
@@ -1319,8 +1367,6 @@ export interface GroupsResponse {
   groups: GroupResponse[]
   total: number
 }
-
-export type GroupResponseInboundTags = string[] | null
 
 export type GroupModifyInboundTags = string[] | null
 
@@ -1362,10 +1408,13 @@ export interface GRPCSettings {
   initial_windows_size?: GRPCSettingsInitialWindowsSize
 }
 
+export type FragmentSettingsSingBox = SingBoxFragmentSettings | null
+
 export type FragmentSettingsXray = XrayFragmentSettings | null
 
 export interface FragmentSettings {
   xray?: FragmentSettingsXray
+  sing_box?: FragmentSettingsSingBox
 }
 
 export interface Forbidden {
@@ -1398,6 +1447,8 @@ export interface CreateUserFromTemplate {
   note?: CreateUserFromTemplateNote
   username: string
 }
+
+export type CreateHostEchConfigList = string | null
 
 export type CreateHostNoiseSettings = NoiseSettings | null
 
@@ -1448,6 +1499,7 @@ export interface CreateHost {
   use_sni_as_host?: boolean
   priority: number
   status?: UserStatus[]
+  ech_config_list?: CreateHostEchConfigList
 }
 
 export type CoreResponseConfig = { [key: string]: unknown }
@@ -1521,6 +1573,18 @@ export interface ClashMuxSettings {
   only_tcp?: boolean
 }
 
+export type BulkUsersProxyMethod = ShadowsocksMethods | null
+
+export type BulkUsersProxyFlow = XTLSFlows | null
+
+export interface BulkUsersProxy {
+  flow?: BulkUsersProxyFlow
+  method?: BulkUsersProxyMethod
+  group_ids?: number[]
+  admins?: number[]
+  users?: number[]
+}
+
 export interface BulkUser {
   amount: number
   group_ids?: number[]
@@ -1531,6 +1595,7 @@ export interface BulkUser {
 
 export interface BulkGroup {
   group_ids: number[]
+  has_group_ids?: number[]
   admins?: number[]
   users?: number[]
 }
@@ -1555,6 +1620,8 @@ export interface BodyAdminTokenApiAdminTokenPost {
   client_id?: BodyAdminTokenApiAdminTokenPostClientId
   client_secret?: BodyAdminTokenApiAdminTokenPostClientSecret
 }
+
+export type BaseHostEchConfigList = string | null
 
 export type BaseHostNoiseSettings = NoiseSettings | null
 
@@ -1605,6 +1672,7 @@ export interface BaseHost {
   use_sni_as_host?: boolean
   priority: number
   status?: UserStatus[]
+  ech_config_list?: BaseHostEchConfigList
 }
 
 export type AdminModifySupportUrl = string | null
@@ -1648,6 +1716,8 @@ export type AdminDetailsSubTemplate = string | null
 
 export type AdminDetailsDiscordId = number | null
 
+export type AdminDetailsId = number | null
+
 export type AdminDetailsSubDomain = string | null
 
 export type AdminDetailsDiscordWebhook = string | null
@@ -1662,6 +1732,7 @@ export interface AdminDetails {
   telegram_id?: AdminDetailsTelegramId
   discord_webhook?: AdminDetailsDiscordWebhook
   sub_domain?: AdminDetailsSubDomain
+  id?: AdminDetailsId
   is_sudo: boolean
   total_users?: number
   used_traffic?: number
@@ -1756,6 +1827,67 @@ export function useBase<TData = Awaited<ReturnType<typeof base>>, TError = Error
   query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof base>>, TError, TData>>
 }): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getBaseQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+  query.queryKey = queryOptions.queryKey
+
+  return query
+}
+
+/**
+ * Dynamic PWA manifest generator
+ * @summary Get Manifest
+ */
+export const getManifest = (params?: GetManifestParams, signal?: AbortSignal) => {
+  return orvalFetcher<unknown>({ url: `/manifest.json`, method: 'GET', params, signal })
+}
+
+export const getGetManifestQueryKey = (params?: GetManifestParams) => {
+  return [`/manifest.json`, ...(params ? [params] : [])] as const
+}
+
+export const getGetManifestQueryOptions = <TData = Awaited<ReturnType<typeof getManifest>>, TError = ErrorType<HTTPValidationError>>(
+  params?: GetManifestParams,
+  options?: { query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getManifest>>, TError, TData>> },
+) => {
+  const { query: queryOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetManifestQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getManifest>>> = ({ signal }) => getManifest(params, signal)
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getManifest>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetManifestQueryResult = NonNullable<Awaited<ReturnType<typeof getManifest>>>
+export type GetManifestQueryError = ErrorType<HTTPValidationError>
+
+export function useGetManifest<TData = Awaited<ReturnType<typeof getManifest>>, TError = ErrorType<HTTPValidationError>>(
+  params: undefined | GetManifestParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getManifest>>, TError, TData>> & Pick<DefinedInitialDataOptions<Awaited<ReturnType<typeof getManifest>>, TError, TData>, 'initialData'>
+  },
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetManifest<TData = Awaited<ReturnType<typeof getManifest>>, TError = ErrorType<HTTPValidationError>>(
+  params?: GetManifestParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getManifest>>, TError, TData>> & Pick<UndefinedInitialDataOptions<Awaited<ReturnType<typeof getManifest>>, TError, TData>, 'initialData'>
+  },
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetManifest<TData = Awaited<ReturnType<typeof getManifest>>, TError = ErrorType<HTTPValidationError>>(
+  params?: GetManifestParams,
+  options?: { query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getManifest>>, TError, TData>> },
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Manifest
+ */
+
+export function useGetManifest<TData = Awaited<ReturnType<typeof getManifest>>, TError = ErrorType<HTTPValidationError>>(
+  params?: GetManifestParams,
+  options?: { query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getManifest>>, TError, TData>> },
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetManifestQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
@@ -2466,6 +2598,59 @@ export const useModifySettings = <TData = Awaited<ReturnType<typeof modifySettin
   const mutationOptions = getModifySettingsMutationOptions(options)
 
   return useMutation(mutationOptions)
+}
+
+/**
+ * @summary Get General Settings
+ */
+export const getGeneralSettings = (signal?: AbortSignal) => {
+  return orvalFetcher<General>({ url: `/api/settings/general`, method: 'GET', signal })
+}
+
+export const getGetGeneralSettingsQueryKey = () => {
+  return [`/api/settings/general`] as const
+}
+
+export const getGetGeneralSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getGeneralSettings>>, TError = ErrorType<Unauthorized | Forbidden>>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGeneralSettings>>, TError, TData>>
+}) => {
+  const { query: queryOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetGeneralSettingsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getGeneralSettings>>> = ({ signal }) => getGeneralSettings(signal)
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getGeneralSettings>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetGeneralSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getGeneralSettings>>>
+export type GetGeneralSettingsQueryError = ErrorType<Unauthorized | Forbidden>
+
+export function useGetGeneralSettings<TData = Awaited<ReturnType<typeof getGeneralSettings>>, TError = ErrorType<Unauthorized | Forbidden>>(options: {
+  query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGeneralSettings>>, TError, TData>> &
+    Pick<DefinedInitialDataOptions<Awaited<ReturnType<typeof getGeneralSettings>>, TError, TData>, 'initialData'>
+}): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetGeneralSettings<TData = Awaited<ReturnType<typeof getGeneralSettings>>, TError = ErrorType<Unauthorized | Forbidden>>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGeneralSettings>>, TError, TData>> &
+    Pick<UndefinedInitialDataOptions<Awaited<ReturnType<typeof getGeneralSettings>>, TError, TData>, 'initialData'>
+}): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetGeneralSettings<TData = Awaited<ReturnType<typeof getGeneralSettings>>, TError = ErrorType<Unauthorized | Forbidden>>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGeneralSettings>>, TError, TData>>
+}): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get General Settings
+ */
+
+export function useGetGeneralSettings<TData = Awaited<ReturnType<typeof getGeneralSettings>>, TError = ErrorType<Unauthorized | Forbidden>>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getGeneralSettings>>, TError, TData>>
+}): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetGeneralSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+  query.queryKey = queryOptions.queryKey
+
+  return query
 }
 
 /**
@@ -4783,6 +4968,76 @@ export const useActiveNextPlan = <TData = Awaited<ReturnType<typeof activeNextPl
 }
 
 /**
+ * Get user subscription agent list
+ * @summary Get User Sub Update List
+ */
+export const getUserSubUpdateList = (username: string, params?: GetUserSubUpdateListParams, signal?: AbortSignal) => {
+  return orvalFetcher<UserSubscriptionUpdateList>({ url: `/api/user/${username}/sub_update`, method: 'GET', params, signal })
+}
+
+export const getGetUserSubUpdateListQueryKey = (username: string, params?: GetUserSubUpdateListParams) => {
+  return [`/api/user/${username}/sub_update`, ...(params ? [params] : [])] as const
+}
+
+export const getGetUserSubUpdateListQueryOptions = <TData = Awaited<ReturnType<typeof getUserSubUpdateList>>, TError = ErrorType<Unauthorized | Forbidden | NotFound | HTTPValidationError>>(
+  username: string,
+  params?: GetUserSubUpdateListParams,
+  options?: { query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserSubUpdateList>>, TError, TData>> },
+) => {
+  const { query: queryOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetUserSubUpdateListQueryKey(username, params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserSubUpdateList>>> = ({ signal }) => getUserSubUpdateList(username, params, signal)
+
+  return { queryKey, queryFn, enabled: !!username, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getUserSubUpdateList>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetUserSubUpdateListQueryResult = NonNullable<Awaited<ReturnType<typeof getUserSubUpdateList>>>
+export type GetUserSubUpdateListQueryError = ErrorType<Unauthorized | Forbidden | NotFound | HTTPValidationError>
+
+export function useGetUserSubUpdateList<TData = Awaited<ReturnType<typeof getUserSubUpdateList>>, TError = ErrorType<Unauthorized | Forbidden | NotFound | HTTPValidationError>>(
+  username: string,
+  params: undefined | GetUserSubUpdateListParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserSubUpdateList>>, TError, TData>> &
+      Pick<DefinedInitialDataOptions<Awaited<ReturnType<typeof getUserSubUpdateList>>, TError, TData>, 'initialData'>
+  },
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetUserSubUpdateList<TData = Awaited<ReturnType<typeof getUserSubUpdateList>>, TError = ErrorType<Unauthorized | Forbidden | NotFound | HTTPValidationError>>(
+  username: string,
+  params?: GetUserSubUpdateListParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserSubUpdateList>>, TError, TData>> &
+      Pick<UndefinedInitialDataOptions<Awaited<ReturnType<typeof getUserSubUpdateList>>, TError, TData>, 'initialData'>
+  },
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetUserSubUpdateList<TData = Awaited<ReturnType<typeof getUserSubUpdateList>>, TError = ErrorType<Unauthorized | Forbidden | NotFound | HTTPValidationError>>(
+  username: string,
+  params?: GetUserSubUpdateListParams,
+  options?: { query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserSubUpdateList>>, TError, TData>> },
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get User Sub Update List
+ */
+
+export function useGetUserSubUpdateList<TData = Awaited<ReturnType<typeof getUserSubUpdateList>>, TError = ErrorType<Unauthorized | Forbidden | NotFound | HTTPValidationError>>(
+  username: string,
+  params?: GetUserSubUpdateListParams,
+  options?: { query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserSubUpdateList>>, TError, TData>> },
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetUserSubUpdateListQueryOptions(username, params, options)
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+  query.queryKey = queryOptions.queryKey
+
+  return query
+}
+
+/**
  * Get all users
  * @summary Get Users
  */
@@ -5276,6 +5531,55 @@ export const useBulkModifyUsersDatalimit = <TData = Awaited<ReturnType<typeof bu
   mutation?: UseMutationOptions<TData, TError, { data: BodyType<BulkUser> }, TContext>
 }): UseMutationResult<TData, TError, { data: BodyType<BulkUser> }, TContext> => {
   const mutationOptions = getBulkModifyUsersDatalimitMutationOptions(options)
+
+  return useMutation(mutationOptions)
+}
+
+/**
+ * @summary Bulk modify users proxy settings
+ */
+export const bulkModifyUsersProxySettings = (bulkUsersProxy: BodyType<BulkUsersProxy>, signal?: AbortSignal) => {
+  return orvalFetcher<unknown>({ url: `/api/users/bulk/proxy_settings`, method: 'POST', headers: { 'Content-Type': 'application/json' }, data: bulkUsersProxy, signal })
+}
+
+export const getBulkModifyUsersProxySettingsMutationOptions = <
+  TData = Awaited<ReturnType<typeof bulkModifyUsersProxySettings>>,
+  TError = ErrorType<Unauthorized | HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<TData, TError, { data: BodyType<BulkUsersProxy> }, TContext>
+}) => {
+  const mutationKey = ['bulkModifyUsersProxySettings']
+  const { mutation: mutationOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } }
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkModifyUsersProxySettings>>, { data: BodyType<BulkUsersProxy> }> = props => {
+    const { data } = props ?? {}
+
+    return bulkModifyUsersProxySettings(data)
+  }
+
+  return { mutationFn, ...mutationOptions } as UseMutationOptions<TData, TError, { data: BodyType<BulkUsersProxy> }, TContext>
+}
+
+export type BulkModifyUsersProxySettingsMutationResult = NonNullable<Awaited<ReturnType<typeof bulkModifyUsersProxySettings>>>
+export type BulkModifyUsersProxySettingsMutationBody = BodyType<BulkUsersProxy>
+export type BulkModifyUsersProxySettingsMutationError = ErrorType<Unauthorized | HTTPValidationError>
+
+/**
+ * @summary Bulk modify users proxy settings
+ */
+export const useBulkModifyUsersProxySettings = <
+  TData = Awaited<ReturnType<typeof bulkModifyUsersProxySettings>>,
+  TError = ErrorType<Unauthorized | HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<TData, TError, { data: BodyType<BulkUsersProxy> }, TContext>
+}): UseMutationResult<TData, TError, { data: BodyType<BulkUsersProxy> }, TContext> => {
+  const mutationOptions = getBulkModifyUsersProxySettingsMutationOptions(options)
 
   return useMutation(mutationOptions)
 }
@@ -5804,84 +6108,4 @@ export function useGetUserTemplates<TData = Awaited<ReturnType<typeof getUserTem
   query.queryKey = queryOptions.queryKey
 
   return query
-}
-
-/**
- * generate node logs for developers
- * @summary Nodes Logs
- */
-export const nodesLogs = (signal?: AbortSignal) => {
-  return orvalFetcher<unknown>({ url: `/api/dev/generate/nodes-logs`, method: 'POST', signal })
-}
-
-export const getNodesLogsMutationOptions = <TData = Awaited<ReturnType<typeof nodesLogs>>, TError = ErrorType<Unauthorized | Forbidden>, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<TData, TError, void, TContext>
-}) => {
-  const mutationKey = ['nodesLogs']
-  const { mutation: mutationOptions } = options
-    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey } }
-
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof nodesLogs>>, void> = () => {
-    return nodesLogs()
-  }
-
-  return { mutationFn, ...mutationOptions } as UseMutationOptions<TData, TError, void, TContext>
-}
-
-export type NodesLogsMutationResult = NonNullable<Awaited<ReturnType<typeof nodesLogs>>>
-
-export type NodesLogsMutationError = ErrorType<Unauthorized | Forbidden>
-
-/**
- * @summary Nodes Logs
- */
-export const useNodesLogs = <TData = Awaited<ReturnType<typeof nodesLogs>>, TError = ErrorType<Unauthorized | Forbidden>, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<TData, TError, void, TContext>
-}): UseMutationResult<TData, TError, void, TContext> => {
-  const mutationOptions = getNodesLogsMutationOptions(options)
-
-  return useMutation(mutationOptions)
-}
-
-/**
- * generate user logs for developers
- * @summary Node Users Usage Logs
- */
-export const nodeUsersUsageLogs = (signal?: AbortSignal) => {
-  return orvalFetcher<unknown>({ url: `/api/dev/generate/users-logs`, method: 'POST', signal })
-}
-
-export const getNodeUsersUsageLogsMutationOptions = <TData = Awaited<ReturnType<typeof nodeUsersUsageLogs>>, TError = ErrorType<Unauthorized | Forbidden>, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<TData, TError, void, TContext>
-}) => {
-  const mutationKey = ['nodeUsersUsageLogs']
-  const { mutation: mutationOptions } = options
-    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey } }
-
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof nodeUsersUsageLogs>>, void> = () => {
-    return nodeUsersUsageLogs()
-  }
-
-  return { mutationFn, ...mutationOptions } as UseMutationOptions<TData, TError, void, TContext>
-}
-
-export type NodeUsersUsageLogsMutationResult = NonNullable<Awaited<ReturnType<typeof nodeUsersUsageLogs>>>
-
-export type NodeUsersUsageLogsMutationError = ErrorType<Unauthorized | Forbidden>
-
-/**
- * @summary Node Users Usage Logs
- */
-export const useNodeUsersUsageLogs = <TData = Awaited<ReturnType<typeof nodeUsersUsageLogs>>, TError = ErrorType<Unauthorized | Forbidden>, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<TData, TError, void, TContext>
-}): UseMutationResult<TData, TError, void, TContext> => {
-  const mutationOptions = getNodeUsersUsageLogsMutationOptions(options)
-
-  return useMutation(mutationOptions)
 }

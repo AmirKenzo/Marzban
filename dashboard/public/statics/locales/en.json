@@ -1,7 +1,7 @@
 {
   "marzban": "Marzban",
   "dashboard": "Dashboard",
-  "master": "Master",
+  "master": "All Nodes",
   "dashboardDescription": "Marzban Management Dashboard",
   "active": "active",
   "online": "Online",
@@ -10,6 +10,7 @@
   "status": "Status",
   "statistics": "Statistics",
   "selectAll": "Select All",
+  "deselectAll": "Deselect All",
   "hosts": "Hosts",
   "success": "Success",
   "error": "Error",
@@ -87,10 +88,27 @@
   "github": "GitHub",
   "community": "Community",
   "supportUs": "Support Us",
-  "manageHosts": "Manage and control hosts.",
-  "manageSettings": "Manage and control settings.",
+  "manageHosts": "Manage and control hosts",
+  "manageSettings": "Manage and control settings",
   "settings": {
     "title": "Settings",
+    "general": {
+      "title": "General",
+      "description": "Configure basic settings for your system",
+      "loadError": "Failed to load general settings. Please try again.",
+      "saveSuccess": "General settings saved successfully",
+      "saveFailed": "Failed to save general settings",
+      "cancelSuccess": "Changes cancelled and original settings restored",
+      "defaultFlow": {
+        "title": "Default VLESS Flow",
+        "description": "Autofill the flow field for new VLESS users"
+      },
+      "defaultMethod": {
+        "title": "Default Shadowsocks Method",
+        "description": "Autofill the encryption method for new Shadowsocks users"
+      },
+      "errorLoadingSettings": "Error loading settings"
+    },
     "notifications": {
       "title": "Notifications",
       "description": "Configure notification settings and manage alert preferences for your system",
@@ -226,7 +244,10 @@
         "title": "Advanced Settings",
         "description": "Advanced Telegram bot features and configurations",
         "miniAppLogin": "Enable Mini App Login",
-        "miniAppLoginDescription": "Allow users to log in through Telegram mini apps"
+        "miniAppLoginDescription": "Allow users to log in through Telegram mini apps",
+        "miniAppUrl": "Mini App URL",
+        "miniAppUrlPlaceholder": "Enter the Mini App URL (optional)",
+        "miniAppUrlDescription": "The URL for your Telegram Mini App. Leave empty if not used."
       }
     },
     "discord": {
@@ -308,7 +329,7 @@
         "expiredAfter": "Expired After",
         "expiredBefore": "Expired Before",
         "expiredAfterPlaceholder": "Select start date",
-        "expiredBeforePlaceholder": "Select end date", 
+        "expiredBeforePlaceholder": "Select end date",
         "dateRange": "Date Range",
         "deleteExpired": "Delete Expired",
         "deleting": "Deleting...",
@@ -505,7 +526,7 @@
   "userTemplateModal.title": "Create User Template",
   "templates": {
     "title": "Templates",
-    "description": "Manage your Templates.",
+    "description": "Manage your Templates",
     "addTemplate": "Create Template",
     "editSuccess": "User Template «{{name}}» has been modified successfully",
     "createSuccess": "User Templates «{{name}}» has been created successfully",
@@ -533,7 +554,8 @@
     "enableSuccess": "Template «{{name}}» has been enabled successfully",
     "disableSuccess": "Template «{{name}}» has been disabled successfully",
     "enableFailed": "Failed to enable admin «{{name}}»",
-    "disableFailed": "Failed to disable admin «{{name}}»"
+    "disableFailed": "Failed to disable admin «{{name}}»",
+    "resetUsages": "Reset Usages"
   },
   "core.configuration": "Configuration",
   "core.generalErrorMessage": "Something went wrong, please check the configuration",
@@ -572,6 +594,7 @@
   "deleteUser.prompt": "Are you sure you want to remove {{username}}?",
   "deleteUser.title": "Remove User",
   "disabled": "disabled",
+  "expire": "Expire",
   "expires": "Expires in {{time}}",
   "expired": "Expired in {{time}}",
   "header.donation": "Donation",
@@ -716,7 +739,10 @@
       "allFieldsRequired": "If one field is entered, all fields must be filled",
       "info": "length,interval,packet (e.g. 10-100,100-200,tlshello)",
       "info.attention": "Attention: currently, this feature only supported in streisand >= 1.6.12 and v2rayNG >= 1.8.16 (custom config)",
-      "info.examples": "Examples:"
+      "info.examples": "Examples:",
+      "fragment": "Fragment",
+      "fallbackDelay": "Fallback Delay",
+      "recordFragment": "Record Fragment"
     },
     "noise": {
       "title": "Noise",
@@ -771,10 +797,10 @@
       "expire_date": "Expiry date of the user",
       "jalali_expire_date": "Expiry date of the user in solar calendar",
       "time_left": "Remaining time of the user",
-      "status_text": "User status",
       "status_emoji": "User status as an emoji (✅,⌛️,🪫,❌,🔌)",
       "protocol": "Proxy protocol (e.g. VMess)",
-      "transport": "Proxy transport method (e.g. ws)"
+      "transport": "Proxy transport method (e.g. ws)",
+      "admin_username": "Admin username"
     },
     "advancedOptions": "Advanced Options",
     "hos.info": "By default, if a request host is set in the XRAY configuration, it will be used. However, if needed, you can set a custom request host here.",
@@ -792,6 +818,9 @@
     "host.wildcard": "Use <badge>*</badge> to generate a random string (works for wildcard domains)",
     "sni.info": "SNI (Server Name Indication) is used to specify which hostname the client is trying to connect to. This is particularly useful when you have multiple domains pointing to the same IP address.",
     "useSniAsHost": "Use SNI as Host",
+    "echConfigList": "ECH Config List",
+    "echConfigList.info": "Encrypted Client Hello (ECH) configuration list. This is a base64 encoded string.",
+    "echConfigListPlaceholder": "Enter ECH Config List",
     "httpVersions": {
       "1.0": "HTTP/1.0",
       "1.1": "HTTP/1.1",
@@ -918,6 +947,17 @@
   "revokeUserSub.prompt": "Are you sure you want to revoke «{{username}}»'s subscription?",
   "revokeUserSub.success": "{{username}}'s subscription has revoked successfully.",
   "revokeUserSub.title": "Revoke User Subscription",
+  "subscriptionClients": {
+    "title": "Subscription Clients",
+    "viewAllClients": "View Clients",
+    "total": "Total: {{count}} clients",
+    "showing": "Showing last {{count}} accesses",
+    "noClients": "No subscription clients found",
+    "noClientsDesc": "This user has not accessed their subscription yet",
+    "knownClient": "Known",
+    "unknown": "Unknown",
+    "error": "Failed to load subscription clients"
+  },
   "search": "Search",
   "status.active": "Active",
   "status.enable": "Enable",
@@ -1012,11 +1052,14 @@
     "lastClient": "Last Client",
     "subscriptionNotAccessed": "Not accessed yet",
     "unknownClient": "Unknown client",
-    "selectedGroups": "{{count}} groups selected",
+    "selectedGroups": "{{count}} Group(s) selected",
     "editError": "Failed to update user «{{name}}»",
     "createError": "Failed to create user «{{name}}»",
     "selectStatus": "Select status",
-    "selectedTemplates": "{{count}} template(s) selected"
+    "selectedTemplates": "{{count}} Template(s) selected"
+  },
+  "userSettings": {
+    "subscriptionUrlCopied": "Subscription URL copied to clipboard"
   },
   "users": "Users",
   "usersTable.copied": "Copied",
@@ -1032,6 +1075,14 @@
   "statistics.ramUsage": "RAM Usage",
   "statistics.cpuUsage": "CPU Usage",
   "statistics.cores": "cores",
+  "statistics.realTimeData": "Real-Time Data",
+  "statistics.historicalData": "Historical Data",
+  "statistics.viewHistorical": "View Historical",
+  "statistics.viewRealtime": "View Realtime",
+  "statistics.historical": "Historical",
+  "statistics.realtime": "Realtime",
+  "statistics.realtimeDescription": "Live statistics and charts for your servers and users.",
+  "statistics.historicalDescription": "Historical server performance data for the selected time range",
   "enable": "Enable",
   "host": {
     "enableSuccess": "Host «{{name}}» has been enabled successfully",
@@ -1062,7 +1113,8 @@
     "enableSuccess": "Group «{{name}}» has been enabled successfully",
     "enableFailed": "Failed to enable group «{{name}}»",
     "disableSuccess": "Group «{{name}}» has been disabled successfully",
-    "disableFailed": "Failed to disable group «{{name}}»"
+    "disableFailed": "Failed to disable group «{{name}}»",
+    "deleteConfirmation": "Remove Group"
   },
   "name": "Name",
   "inboundTags": "Inbound Tags",
@@ -1293,9 +1345,12 @@
   "statistics.selectTimeRangeDescription": "Choose a date range above to view traffic usage statistics.",
   "statistics.noDataInRange": "No Data in Selected Range",
   "statistics.noDataInRangeDescription": "No traffic data found for the selected time period. Try selecting a different date range.",
-
   "statistics.selectNodeToView": "Select a node to view detailed statistics",
   "statistics.userStatisticsDescription": "Overview of user account status and activity",
+  "statistics.date": "Date",
+  "statistics.totalUsage": "Total Usage",
+  "statistics.uplink": "Uplink",
+  "statistics.downlink": "Downlink",
   "errors.connectionFailed": "Connection failed. Please check your network and try again.",
   "errors.statisticsLoadFailed": "Failed to Load Statistics",
   "usersTable.resetUsageTitle": "Reset User Usage",
@@ -1316,6 +1371,8 @@
     "hours": "hours",
     "min": "min",
     "mins": "mins",
+    "second": "second",
+    "seconds": "seconds",
     "ago": "ago"
   },
   "notConnectedYet": "Not connected yet",
@@ -1332,7 +1389,10 @@
     "tryDifferentRange": "Try a different time range.",
     "trendingUp": "Trending up by",
     "trendingDown": "Trending down by",
-    "usageSummary": "Showing total usage for the selected period."
+    "usageSummary": "Showing total usage for the selected period.",
+    "activeNextPlanTitle": "Activate User Next Plan",
+    "activeNextPlanPrompt": "Are you sure you want to activate next plan for «{{name}}»?",
+    "activeNextPlanSubmit": "Activate Next Plan"
   },
   "setOwnerModal": {
     "title": "Set Owner",
@@ -1343,5 +1403,79 @@
     "success": "User {{username}}'s owner changed to {{admin}} successfully.",
     "error": "Failed to change owner of user {{username}} to {{admin}}.",
     "loadError": "Failed to load admins."
-  }
+  },
+  "bulk": {
+    "title": "Bulk",
+    "groups": "Groups",
+    "proxySettings": "Proxy Settings",
+    "proxySettingsDesc": "Configure the proxy settings to apply",
+    "applyToProxyDesc": "Select the groups, users, or admins you want to apply proxy settings to",
+    "flowMethod": "Flow: {{flow}} | Method: {{method}}",
+    "expireDate": "Expire date",
+    "dataLimit": "Data limit",
+    "groupsDesc": "Manage group assignments for multiple users and admins at once. Add or remove groups in bulk.",
+    "expireDateDesc": "Select the expiration date to apply",
+    "applyToExpireDesc": "Select the groups, users, or admins you want to apply expiration date to",
+    "noDateSelected": "No date selected",
+    "dataLimitDesc": "Set the data limit in GB to add or subtract",
+    "operationType": "Operation Type",
+    "groupsOperationDesc": "Select whether to add or remove groups from users.",
+    "addGroups": "Add Groups",
+    "removeGroups": "Remove Groups",
+    "addExpiry": "Add to Expiry",
+    "subtractExpiry": "Subtract from Expiry",
+    "addDataLimit": "Add Data Limit",
+    "subtractDataLimit": "Subtract Data Limit",
+    "applyToDataLimitDesc": "Select the groups, users, or admins you want to apply data limit to",
+    "noLimitSet": "No limit set",
+    "dataLimitLabel": "Data Limit (GB)",
+    "dataLimitPlaceholder": "Enter data limit in GB",
+    "dataLimitRequired": "Please enter a valid data limit.",
+    "applyDataLimit": "Apply Data Limit",
+    "applyDataLimitDescription": "Apply the selected data limit to the selected groups, users, and admins.",
+    "confirmApplyDataLimitTitle": "Confirm Apply Data Limit",
+    "confirmApplyDataLimitDescription": "Are you sure you want to apply data limit of {{dataLimit}} GB to {{totalTargets}} target(s)? This action will update the data limit for all selected groups, users, and admins.",
+    "insertDataLimitPlaceholder": "Insert data limit",
+    "flowLabel": "Flow",
+    "methodLabel": "Method",
+    "selectFlowPlaceholder": "Select flow",
+    "selectMethodPlaceholder": "Select method",
+    "proxySettingsRequired": "Please select at least one proxy setting (Flow or Method).",
+    "applyProxySettings": "Apply Proxy Settings",
+    "applyProxyDescription": "Apply the selected proxy settings to the selected groups, users, and admins.",
+    "confirmApplyProxyTitle": "Confirm Apply Proxy Settings",
+    "confirmApplyProxyDescription": "Are you sure you want to apply proxy settings to {{totalTargets}} target(s)? This action will update the proxy settings for all selected groups, users, and admins.",
+    "noTargetsSelected": "Please select at least one target.",
+    "selectedCount": "{{count}} selected",
+    "groupsDescShort": "Select the groups you want to apply",
+    "groupsCount": "{{count}} groups",
+    "targetsCount": "{{count}} targets",
+    "applyTo": "Apply To",
+    "applyToDesc": "Select the user or admin you want to apply settings",
+    "confirmApplyExpireDescriptionAll": "Are you sure you want to apply the expiration date {{expireDate}} to ALL users, admins, and groups? This will update the expiration date for everyone.",
+    "confirmApplyExpireDescription": "Are you sure you want to apply the expiration date {{expireDate}} to {{totalTargets}} target(s)? This will update the expiration date for all selected groups, users, and admins.",
+    "confirmApplyDataLimitDescriptionAll": "Are you sure you want to apply the data limit of {{dataLimit}} GB to ALL users, admins, and groups? This will update the data limit for everyone.",
+    "confirmApplyProxyDescriptionAll": "Are you sure you want to apply the proxy settings to ALL users, admins, and groups? This will update the proxy settings for everyone.",
+    "confirmApplyGroupsDescriptionAll": "Are you sure you want to apply the group changes to ALL users, admins, and groups? This will update the groups for everyone.",
+    "confirmApplyGroupsDescription": "Are you sure you want to apply the group changes to {{totalTargets}} target(s)? This will update the groups for all selected users and admins.",
+    "expire.placeholder": "Enter expire date"
+  },
+  "operationSuccess": "Operation successful!",
+  "operationFailed": "Operation failed!",
+  "settingsApplied": "Settings applied successfully!",
+  "applying": "Applying...",
+  "timeSelector.pickDate": "Pick a date",
+  "advanceSearch": {
+    "title": "Advanced Search",
+    "byUsername": "Username and Notes",
+    "byProtocol": "Protocol Data",
+    "byStatus": "Status",
+    "byAdmin": "Admin",
+    "byGroup": "Group",
+    "selectGroup": "Select Group ... ",
+    "selectAdmin": "Select Admin ... ",
+    "selectStatus": "Select Status ... "
+  },
+  "clearAllFilters": "Clear All Filters",
+  "activeFilters": "active"
 }

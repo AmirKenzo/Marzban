@@ -1,7 +1,7 @@
 {
   "marzban": "مـرزبان",
   "dashboard": "داشبورد",
-  "master": "سرور اصلی",
+  "master": "همه گره‌ها",
   "dashboardDescription": "داشبورد مدیریت مـرزبان",
   "active": "فعال",
   "online": "آنلاین",
@@ -10,6 +10,7 @@
   "status": "وضعیت",
   "statistics": "آمار",
   "selectAll": "انتخاب همه",
+  "deselectAll": "لغو انتخاب همه",
   "modifying": "در حال ویرایش...",
   "removing": "در حال حذف...",
   "creating": "در حال ایجاد...",
@@ -20,8 +21,8 @@
   "github": "گیت‌هاب",
   "community": "جامعه",
   "supportUs": "پشتیبانی از ما",
-  "manageHosts": "مدیریت و کنترل هاست‌ها.",
-  "manageSettings": "مدیریت و کنترل تنظیمات.",
+  "manageHosts": "مدیریت و کنترل هاست‌ها",
+  "manageSettings": "مدیریت و کنترل تنظیمات",
   "monitorUsers": "مدیریت کاربران",
   "alltime": "همه زمان",
   "settings": {
@@ -64,7 +65,10 @@
         "title": "تنظیمات پیشرفته",
         "description": "پیکربندی رفتار پیشرفته اعلان‌ها شامل سیاست‌های تلاش مجدد و تنظیمات پروکسی",
         "maxRetries": "حداکثر تلاش مجدد",
-        "proxyUrl": "آدرس پروکسی"
+        "proxyUrl": "آدرس پروکسی",
+        "miniAppUrl": "آدرس مینی‌اپ تلگرام",
+        "miniAppUrlPlaceholder": "آدرس مینی‌اپ را وارد کنید (اختیاری)",
+        "miniAppUrlDescription": "آدرس مینی‌اپ تلگرام خود را وارد کنید. در صورت عدم استفاده، خالی بگذارید."
       }
     },
     "subscriptions": {
@@ -291,6 +295,23 @@
     },
     "theme": {
       "title": "تم"
+    },
+    "general": {
+      "title": "عمومی",
+      "description": "پیکربندی تنظیمات پایه برای سیستم شما",
+      "loadError": "بارگیری تنظیمات عمومی ناموفق بود. لطفاً دوباره تلاش کنید.",
+      "saveSuccess": "تنظیمات عمومی با موفقیت ذخیره شد",
+      "saveFailed": "ذخیره تنظیمات عمومی ناموفق بود",
+      "cancelSuccess": "تغییرات لغو شد و تنظیمات اصلی بازیابی شد",
+      "defaultFlow": {
+        "title": "جریان VLESS پیش‌فرض",
+        "description": "پر کردن خودکار فیلد جریان برای کاربران جدید VLESS"
+      },
+      "defaultMethod": {
+        "title": "روش پیش‌فرض شدوساکس",
+        "description": "پر کردن خودکار روش رمزنگاری برای کاربران جدید شدوساکس"
+      },
+      "errorLoadingSettings": "خطا در بارگذاری تنظیمات"
     }
   },
   "saving": "در حال ذخیره...",
@@ -317,7 +338,6 @@
   "test": "تست",
   "testing": "در حال تست",
   "confirm": "تایید",
-
   "admins": {
     "title": "مدیران",
     "description": "مدیریت مدیران سیستم",
@@ -406,7 +426,7 @@
   "userTemplateModal.title": "ایجاد قالب کاربر",
   "templates": {
     "title": "قالب‌ها",
-    "description": "مدیریت قالب‌های شما.",
+    "description": "مدیریت قالب‌های شما",
     "addTemplate": "ایجاد قالب",
     "editSuccess": "قالب کاربر «{{name}}» با موفقیت به‌روزرسانی شد",
     "createSuccess": "قالب کاربر «{{name}}» با موفقیت ایجاد شد",
@@ -434,7 +454,8 @@
     "enableSuccess": "قالب «{{name}}» با موفقیت فعال شد",
     "disableSuccess": "قالب «{{name}}» با موفقیت غیرفعال شد",
     "enableFailed": "فعال‌سازی مدیر «{{name}}» ناموفق بود",
-    "disableFailed": "غیرفعال‌سازی مدیر «{{name}}» ناموفق بود"
+    "disableFailed": "غیرفعال‌سازی مدیر «{{name}}» ناموفق بود",
+    "resetUsages": "ریست مصرف"
   },
   "core.configuration": "پیکربندی",
   "core.generalErrorMessage": "مشکلی پیش آمده، لطفا پیکربندی را بررسی کنید",
@@ -610,7 +631,10 @@
       "allFieldsRequired": "اگر یک فیلد پر شود، همه فیلدها باید پر شوند",
       "info": "طول،فاصله،بسته (مثال: 10-100,100-200,tlshello)",
       "info.attention": "توجه: در حال حاضر، این ویژگی فقط در streisand >= 1.6.12 و v2rayNG >= 1.8.16 (پیکربندی سفارشی) پشتیبانی می‌شود",
-      "info.examples": "مثال‌ها:"
+      "info.examples": "مثال‌ها:",
+      "fragment": "قطعه‌بندی",
+      "fallbackDelay": "تأخیر بازگشت",
+      "recordFragment": "ضبط قطعه"
     },
     "noise": {
       "title": "نویز",
@@ -664,10 +688,10 @@
       "expire_date": "تاریخ انقضا",
       "jalali_expire_date": "تاریخ انقضا به تقویم خورشیدی",
       "time_left": "زمان باقی‌مانده",
-      "status_text": "وضعیت کاربر",
       "status_emoji": "وضعیت کاربر به صورت ایموجی (✅,⌛️,🪫,❌,🔌)",
       "protocol": "پروتکل پروکسی (مثال: VMess)",
-      "transport": "روش انتقال پروکسی (مثال: ws)"
+      "transport": "روش انتقال پروکسی (مثال: ws)",
+      "admin_username": "نام کاربری ادمین"
     },
     "advancedOptions": "تنظیمات پیشرفته",
     "host.info": "به طور پیش‌فرض، اگر میزبان درخواست در پیکربندی XRAY تنظیم شده باشد، از آن استفاده می‌شود. با این حال، در صورت نیاز، می‌توانید یک میزبان درخواست سفارشی در اینجا تنظیم کنید.",
@@ -678,6 +702,9 @@
     "proxyOutbound.info": "ترافیک خروجی اضافی (فقط در پیکربندی سفارشی v2ray)",
     "security.info": "اگر سرور واسط این هاست از لایه امنیتی متفاوتی نسبت به پیش‌فرض ورودی شما استفاده می‌کند، می‌توانید لایه امنیتی سفارشی را اینجا تنظیم کنید.",
     "useSniAsHost": "استفاده از SNI به عنوان هاست",
+    "echConfigList": "لیست پیکربندی ECH",
+    "echConfigList.info": "لیست پیکربندی Encrypted Client Hello (ECH). این یک رشته کدگذاری شده با base64 است.",
+    "echConfigListPlaceholder": "لیست پیکربندی ECH را وارد کنید",
     "httpVersions": {
       "1.0": "HTTP/1.0",
       "1.1": "HTTP/1.1",
@@ -808,6 +835,17 @@
   "revokeUserSub.prompt": "آیا مطمئن هستید که می خواهید اشتراک «{{username}}» را بازنشانی کنید؟",
   "revokeUserSub.success": "اشتراک {{username}} با موفقیت بازنشانی شد.",
   "revokeUserSub.title": "بازنشانی اشتراک کاربر",
+  "subscriptionClients": {
+    "title": "کلاینت‌های اشتراک",
+    "viewAllClients": "مشاهده کلاینت‌ها",
+    "total": "مجموع: {{count}} کلاینت",
+    "showing": "نمایش آخرین {{count}} دسترسی",
+    "noClients": "هیچ کلاینت اشتراکی یافت نشد",
+    "noClientsDesc": "این کاربر هنوز به اشتراک خود دسترسی نداشته است",
+    "knownClient": "شناخته شده",
+    "unknown": "نامشخص",
+    "error": "بارگیری کلاینت‌های اشتراک ناموفق بود"
+  },
   "search": "جستجو",
   "status.active": "فعال",
   "status.enable": "فعال",
@@ -894,13 +932,13 @@
   "statistics.serverSelection": "انتخاب سرور",
   "statistics.selectServerToMonitor": "سروری را برای نظارت بر معیارهای عملکرد انتخاب کنید",
   "statistics.selectServer": "انتخاب سرور",
-  "statistics.realTimeData": "داده‌های زمان واقعی",
+  "statistics.realTimeData": "داده‌های لحظه‌ای",
   "statistics.historicalData": "داده‌های تاریخی",
   "statistics.viewHistorical": "مشاهده تاریخی",
   "statistics.viewRealtime": "مشاهده زمان واقعی",
   "statistics.historical": "تاریخی",
   "statistics.realtime": "زمان واقعی",
-  "statistics.realtimeDescription": "معیارهای عملکرد زنده سرور که هر چند ثانیه به‌روزرسانی می‌شود",
+  "statistics.realtimeDescription": "آمار و نمودارهای زنده برای سرورها و کاربران شما.",
   "statistics.historicalDescription": "داده‌های عملکرد تاریخی سرور برای بازه زمانی انتخاب شده",
   "statistics.selectTimeRange": "انتخاب بازه زمانی",
   "statistics.selectTimeRangeDescription": "دوره مورد نظر را برای تجزیه و تحلیل داده‌های تاریخی انتخاب کنید",
@@ -931,7 +969,8 @@
     "editFailed": "ویرایش گروه «{{name}}» با خطا مواجه شد",
     "deleteSuccess": "گروه «{{name}}» با موفقیت حذف شد",
     "deleteFailed": "حذف گروه «{{name}}» با خطا مواجه شد",
-    "deleteConfirm": "آیا مطمئن هستید که می‌خواهید گروه «{{name}}» را حذف کنید؟"
+    "deleteConfirm": "آیا مطمئن هستید که می‌خواهید گروه «{{name}}» را حذف کنید؟",
+    "deleteConfirmation": "حذف گروه"
   },
   "name": "نام",
   "nodeModal": {
@@ -995,14 +1034,14 @@
       "refreshed": "داده‌ها با موفقیت به‌روزرسانی شدند",
       "refreshFailed": "به‌روزرسانی داده‌ها ناموفق بود",
       "backToStats": "بازگشت به آمار",
-      "ipAddresses": "آدرس‌های IP",
+      "ipAddresses": "آدرس IP",
       "errorLoading": "خطا در بارگذاری آمار کاربر",
       "userNotOnline": "کاربر آنلاین نیست",
       "searchUser": "برای مشاهده آمار آنلاین، کاربری را جستجو کنید",
       "autoRefresh": "به‌روزرسانی خودکار هر 5 ثانیه",
-      "connections": "اتصالات",
-      "protocols": "پروتکل‌ها",
-      "viewIPs": "مشاهده IP‌ها",
+      "connections": "اتصال",
+      "protocols": "پروتکل",
+      "viewIPs": "مشاهده IP ‌ها",
       "userNotFound": "کاربر '{{username}}' یافت نشد یا آنلاین نیست",
       "errorLoadingIPs": "خطا در بارگذاری آدرس‌های IP کاربر"
     }
@@ -1220,6 +1259,9 @@
     "selectStatus": "انتخاب وضعیت",
     "selectedTemplates": "{{count}} قالب انتخاب شده"
   },
+  "userSettings": {
+    "subscriptionUrlCopied": "لینک اشتراک در کلیپ‌بورد کپی شد"
+  },
   "sidebar.expand": "باز کردن منو",
   "sidebar.collapse": "بستن منو",
   "usersTable.deleteUserTitle": "حذف کاربر",
@@ -1250,7 +1292,6 @@
   "statistics.waitingForDataDescription": "آمار لحظه‌ای در اینجا نمایش داده می‌شود پس از شروع جریان داده‌ها.",
   "statistics.noDataInRange": "داده‌ای در بازه انتخابی وجود ندارد",
   "statistics.noDataInRangeDescription": "هیچ داده ترافیکی برای دوره زمانی انتخابی یافت نشد. بازه زمانی متفاوتی را انتخاب کنید.",
-
   "statistics.selectNodeToView": "یک نود را انتخاب کنید تا آمار دقیق را مشاهده کنید",
   "statistics.userStatisticsDescription": "نمای کلی از وضعیت و فعالیت حساب‌های کاربری",
   "errors.connectionFailed": "اتصال با خطا مواجه شد. لطفاً شبکه خود را بررسی کنید و دوباره تلاش کنید.",
@@ -1273,6 +1314,8 @@
     "hours": "ساعت",
     "min": "دقیقه",
     "mins": "دقیقه",
+    "second": "ثانیه",
+    "seconds": "ثانیه",
     "ago": "پیش"
   },
   "notConnectedYet": "هنوز متصل نشده",
@@ -1289,7 +1332,10 @@
     "tryDifferentRange": "بازه زمانی دیگری را امتحان کنید.",
     "trendingUp": "روند افزایشی",
     "trendingDown": "روند کاهشی",
-    "usageSummary": "نمایش مجموع مصرف در بازه انتخاب شده."
+    "usageSummary": "نمایش مجموع مصرف در بازه انتخاب شده.",
+    "activeNextPlanTitle": "فعال‌سازی پلن بعدی کاربر",
+    "activeNextPlanPrompt": "آیا مطمئن هستید که می‌خواهید پلن بعدی را برای «{{name}}» فعال کنید؟",
+    "activeNextPlanSubmit": "فعال‌سازی پلن بعدی"
   },
   "setOwnerModal": {
     "title": "تعیین مالک",
@@ -1301,7 +1347,112 @@
     "error": "تغییر مالک کاربر {{username}} به {{admin}} ناموفق بود.",
     "loadError": "بارگذاری لیست مدیران ناموفق بود."
   },
+  "bulk": {
+    "title": "عملیات گروهی",
+    "groups": "گروه‌ها",
+    "proxySettings": "تنظیمات پروکسی",
+    "proxySettingsDesc": "تنظیمات پروکسی را برای اعمال انتخاب کنید",
+    "applyToProxyDesc": "گروه‌ها، کاربران یا مدیرانی که می‌خواهید تنظیمات پروکسی را اعمال کنید انتخاب کنید",
+    "flowMethod": "جریان: {{flow}} | روش: {{method}}",
+    "expireDate": "تاریخ انقضا",
+    "dataLimit": "محدودیت حجم",
+    "groupsDesc": "مدیریت تخصیص گروه‌ها برای چندین کاربر و مدیر به طور همزمان. افزودن یا حذف گروه‌ها به صورت گروهی.",
+    "expireDateDesc": "تاریخ انقضا را برای اعمال انتخاب کنید",
+    "applyToExpireDesc": "گروه‌ها، کاربران یا مدیرانی که می‌خواهید تاریخ انقضا را اعمال کنید انتخاب کنید",
+    "noDateSelected": "تاریخی انتخاب نشده است",
+    "dataLimitDesc": "محدودیت حجم را به گیگابایت برای افزودن یا کسر وارد کنید",
+    "operationType": "نوع عملیات",
+    "groupsOperationDesc": "انتخاب کنید که آیا می‌خواهید گروه‌ها را به کاربران اضافه یا حذف کنید.",
+    "addGroups": "افزودن گروه‌ها",
+    "removeGroups": "حذف گروه‌ها",
+    "addExpiry": "افزودن به انقضا",
+    "subtractExpiry": "کاهش از انقضا",
+    "addDataLimit": "افزودن محدودیت حجم",
+    "subtractDataLimit": "کاهش محدودیت حجم",
+    "applyToDataLimitDesc": "گروه‌ها، کاربران یا مدیرانی که می‌خواهید محدودیت حجم را اعمال کنید انتخاب کنید",
+    "noLimitSet": "محدودیتی تنظیم نشده است",
+    "selectFlow": "انتخاب جریان",
+    "selectMethod": "انتخاب روش",
+    "applyChanges": "اعمال تغییرات",
+    "applyDescription": "اعمال تخصیص گروه‌ها و تنظیمات انتخاب شده به کاربران و مدیران انتخاب شده.",
+    "addGroupsToUsers": "افزودن گروه‌ها به کاربران",
+    "removeGroupsFromUsers": "حذف گروه‌ها از کاربران",
+    "confirmAddGroupsTitle": "تایید افزودن گروه‌ها",
+    "confirmAddGroupsDescription": "آیا مطمئن هستید که می‌خواهید {{totalGroups}} گروه را به {{totalTargets}} هدف اضافه کنید؟ این عمل گروه‌های انتخاب شده را به همه کاربران و مدیران انتخاب شده اختصاص خواهد داد.",
+    "confirmRemoveGroupsTitle": "تایید حذف گروه‌ها",
+    "confirmRemoveGroupsDescription": "آیا مطمئن هستید که می‌خواهید {{totalGroups}} گروه را از {{totalTargets}} هدف حذف کنید؟ این عمل گروه‌های انتخاب شده را از همه کاربران و مدیران انتخاب شده حذف خواهد کرد.",
+    "applySettings": "اعمال تنظیمات",
+    "settingsConfigured": "تنظیمات پیکربندی شده",
+    "noSettings": "بدون تنظیمات",
+    "searchGroups": "جستجوی گروه‌ها...",
+    "searchHasGroups": "جستجوی گروه‌های موجود...",
+    "searchUsers": "جستجوی کاربران...",
+    "searchAdmins": "جستجوی مدیران...",
+    "selectGroups": "انتخاب گروه‌ها",
+    "selectHasGroups": "انتخاب گروه‌های موجود",
+    "selectUsers": "انتخاب کاربران",
+    "selectAdmins": "انتخاب مدیران",
+    "expireDateLabel": "تاریخ انقضا",
+    "expireDateRequired": "لطفاً تاریخ انقضا را انتخاب کنید.",
+    "selectExpireDate": "انتخاب تاریخ انقضا",
+    "applyExpireDate": "اعمال تاریخ انقضا",
+    "applyExpireDescription": "اعمال تاریخ انقضای انتخاب شده به گروه‌ها، کاربران و مدیران انتخاب شده.",
+    "confirmApplyExpireTitle": "تایید اعمال تاریخ انقضا",
+    "confirmApplyExpireDescription": "آیا مطمئن هستید که می‌خواهید تاریخ انقضا {{expireDate}} را برای {{totalTargets}} مورد انتخابی اعمال کنید؟ این کار تاریخ انقضا را برای همه گروه‌ها، کاربران و مدیران انتخاب‌شده به‌روزرسانی می‌کند.",
+    "confirmApplyExpireDescriptionAll": "آیا مطمئن هستید که می‌خواهید تاریخ انقضا {{expireDate}} را برای همه کاربران، مدیران و گروه‌ها اعمال کنید؟ این کار تاریخ انقضا را برای همه به‌روزرسانی می‌کند.",
+    "insertExpireDatePlaceholder": "درج تاریخ انقضا",
+    "dataLimitLabel": "محدودیت حجم (گیگابایت)",
+    "dataLimitPlaceholder": "محدودیت حجم را به گیگابایت وارد کنید",
+    "dataLimitRequired": "لطفاً محدودیت حجم معتبر وارد کنید.",
+    "applyDataLimit": "اعمال محدودیت حجم",
+    "applyDataLimitDescription": "اعمال محدودیت حجم انتخاب شده به گروه‌ها، کاربران و مدیران انتخاب شده.",
+    "confirmApplyDataLimitTitle": "تایید اعمال محدودیت حجم",
+    "confirmApplyDataLimitDescription": "آیا مطمئن هستید که می‌خواهید محدودیت حجم {{dataLimit}} گیگابایت را برای {{totalTargets}} مورد انتخابی اعمال کنید؟ این کار محدودیت حجم را برای همه گروه‌ها، کاربران و مدیران انتخاب‌شده به‌روزرسانی می‌کند.",
+    "confirmApplyDataLimitDescriptionAll": "آیا مطمئن هستید که می‌خواهید محدودیت حجم {{dataLimit}} گیگابایت را برای همه کاربران، مدیران و گروه‌ها اعمال کنید؟ این کار محدودیت حجم را برای همه به‌روزرسانی می‌کند.",
+    "insertDataLimitPlaceholder": "درج محدودیت حجم",
+    "flowLabel": "جریان",
+    "methodLabel": "روش",
+    "selectFlowPlaceholder": "انتخاب جریان",
+    "selectMethodPlaceholder": "انتخاب روش",
+    "proxySettingsRequired": "لطفاً حداقل یک تنظیم پروکسی (جریان یا روش) را انتخاب کنید.",
+    "applyProxySettings": "اعمال تنظیمات پروکسی",
+    "applyProxyDescription": "اعمال تنظیمات پروکسی انتخاب شده به گروه‌ها، کاربران و مدیران انتخاب شده.",
+    "confirmApplyProxyTitle": "تایید اعمال تنظیمات پروکسی",
+    "confirmApplyProxyDescription": "آیا مطمئن هستید که می‌خواهید تنظیمات پروکسی را برای {{totalTargets}} مورد انتخابی اعمال کنید؟ این کار تنظیمات پروکسی را برای همه گروه‌ها، کاربران و مدیران انتخاب‌شده به‌روزرسانی می‌کند.",
+    "confirmApplyProxyDescriptionAll": "آیا مطمئن هستید که می‌خواهید تنظیمات پروکسی را برای همه کاربران، مدیران و گروه‌ها اعمال کنید؟ این کار تنظیمات پروکسی را برای همه به‌روزرسانی می‌کند.",
+    "noTargetsSelected": "لطفاً حداقل یک هدف را انتخاب کنید.",
+    "groupsDescShort": "گروه‌هایی که می‌خواهید اعمال کنید را انتخاب کنید",
+    "groupsCount": "{{count}} گروه",
+    "targetsCount": "{{count}} هدف",
+    "applyTo": "اعمال به",
+    "applyToDesc": "کاربر یا مدیری که می‌خواهید تنظیمات را اعمال کنید انتخاب کنید",
+    "confirmApplyGroupsDescriptionAll": "آیا مطمئن هستید که می‌خواهید تغییرات گروه را برای همه کاربران، مدیران و گروه‌ها اعمال کنید؟ این کار گروه‌ها را برای همه به‌روزرسانی می‌کند.",
+    "confirmApplyGroupsDescription": "آیا مطمئن هستید که می‌خواهید تغییرات گروه را برای {{totalTargets}} مورد انتخابی اعمال کنید؟ این کار گروه‌ها را برای همه کاربران و مدیران انتخاب‌شده به‌روزرسانی می‌کند.",
+    "expire.placeholder": "تاریخ انقضا را وارد کنید"
+  },
+  "operationSuccess": "عملیات موفق بود!",
+  "operationFailed": "عملیات ناموفق بود!",
+  "settingsApplied": "تنظیمات با موفقیت اعمال شد!",
   "inboundTags": "تگ‌های ورودی",
   "searchInbounds": "جستجوی ورودی‌ها...",
-  "noInboundsFound": "هیچ ورودی‌ای یافت نشد"
+  "noInboundsFound": "هیچ ورودی‌ای یافت نشد",
+  "selectedCount": "{{count}} انتخاب شده",
+  "statistics.date": "تاریخ",
+  "statistics.totalUsage": "مصرف کل",
+  "statistics.uplink": "ارسال",
+  "statistics.downlink": "دریافت",
+  "timeSelector.pickDate": "انتخاب تاریخ",
+  "advanceSearch": {
+    "title": "جستجوی پیشرفته",
+    "byUsername": "نام کاربری و یادداشت‌ها",
+    "byProtocol": "داده‌های پروتکل",
+    "byStatus": "وضعیت",
+    "byAdmin": "مدیر",
+    "byGroup": "گروه",
+    "selectGroup": "انتخاب گروه ...",
+    "selectAdmin": "انتخاب مدیر ...",
+    "selectStatus": "انتخاب وضعیت ..."
+  },
+  "clearAllFilters": "پاک کردن همه فیلترها",
+  "activeFilters": "فعال"
 }

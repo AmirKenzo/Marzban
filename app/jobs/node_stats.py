@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime as dt, timezone as tz
 
 from GozargahNodeBridge import GozargahNode
 
@@ -7,7 +6,11 @@ from app import scheduler
 from app.db import GetDB
 from app.db.models import NodeStat
 from app.node import node_manager
+from app.utils.logger import get_logger
 from config import ENABLE_RECORDING_NODES_STATS, JOB_GHATER_NODES_STATS_INTERVAL
+
+
+logger = get_logger("jobs")
 
 
 async def get_stat(id: int, node: GozargahNode) -> NodeStat:
@@ -20,7 +23,6 @@ async def get_stat(id: int, node: GozargahNode) -> NodeStat:
         return
 
     return NodeStat(
-        created_at=dt.now(tz.utc),
         node_id=id,
         mem_total=stats.mem_total,
         mem_used=stats.mem_used,

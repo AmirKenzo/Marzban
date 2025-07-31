@@ -3,8 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import status
 
 from tests.api import client
-
-from .test_user_template import test_user_template_create  # noqa
+from tests.api.test_f_user_template import test_user_template_create  # noqa
 
 
 def test_user_create_active(access_token):
@@ -90,15 +89,40 @@ def test_users_get(access_token):
 
 def test_user_subscriptions(access_token):
     """Test that the user subscriptions route is accessible."""
-    user_subscription_formats = ["info", "sing_box", "clash_meta", "clash", "outline", "links", "links_base64", "xray"]
+    user_subscription_formats = [
+        "",
+        "info",
+        "sing_box",
+        "clash_meta",
+        "clash",
+        "outline",
+        "links",
+        "links_base64",
+        "xray",
+    ]
 
     users = test_users_get(access_token)
 
     for user in users:
         for usf in user_subscription_formats:
             url = f"{user['subscription_url']}/{usf}"
-            response = client.get(url)
+            response = client.get(url, headers={"Accept": "text/html"} if usf == "" else None)
             assert response.status_code == status.HTTP_200_OK
+
+
+def test_user_sub_update_user_agent(access_token):
+    """Test that the user sub_update user_agent is accessible."""
+    users = test_users_get(access_token)
+    user = users[0]
+    url = f"{user['subscription_url']}"
+    user_agent = "v2rayNG/1.9.46 This is Marzban Test"
+    client.get(url, headers={"User-Agent": user_agent})
+    response = client.get(
+        f"/api/user/{user['username']}/sub_update",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["updates"][0]["user_agent"] == user_agent
 
 
 def test_user_get(access_token):

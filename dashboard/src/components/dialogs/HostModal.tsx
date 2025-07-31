@@ -8,15 +8,17 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useClipboard } from '@/hooks/use-clipboard'
 import useDirDetection from '@/hooks/use-dir-detection'
 import { cn } from '@/lib/utils'
-import {getHosts, getInbounds, UserStatus} from '@/service/api'
+import { getHosts, getInbounds, UserStatus } from '@/service/api'
 import { queryClient } from '@/utils/query-client'
 import { useQuery } from '@tanstack/react-query'
 import { Cable, ChevronsLeftRightEllipsis, GlobeLock, Info, Lock, Network, Plus, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { UseFormReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { HostFormValues } from '../hosts/Hosts'
 
 interface HostModalProps {
@@ -41,6 +43,8 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
   const [isTransportOpen, setIsTransportOpen] = useState(false)
   const { t } = useTranslation()
   const dir = useDirDetection()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { copy } = useClipboard()
 
   const cleanPayload = (data: any): any => {
     // Helper function to check if an object has any non-empty values
@@ -62,7 +66,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
 
         if (typeof value === 'object' && !Array.isArray(value)) {
           const cleanedNested = cleanObject(value, currentPath)
-          if (hasNonEmptyValues(cleanedNested)) {
+          if (Object.keys(cleanedNested).length > 0) {
             result[key] = cleanedNested
           }
         } else if (Array.isArray(value)) {
@@ -92,23 +96,16 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
     queryFn: () => getInbounds(),
   })
 
-  // Update the hosts query to refetch when needed
+  // Update the hosts query to refetch only when needed (not on dialog open)
   const { data: hosts = [] } = useQuery({
     queryKey: ['getHostsQueryKey'],
     queryFn: () => getHosts(),
-    enabled: isDialogOpen || isTransportOpen, // Fetch when dialog opens or transport section is open
+    enabled: isTransportOpen, // Only fetch when transport section is open
     refetchOnWindowFocus: false,
     select: data => data.filter(host => host.id != null), // Filter out hosts with null IDs
   })
 
-  // Refresh hosts data when the dialog opens
-  useEffect(() => {
-    if (isDialogOpen) {
-      queryClient.invalidateQueries({
-        queryKey: ['getHostsQueryKey'],
-      })
-    }
-  }, [isDialogOpen])
+  // No automatic refresh when dialog opens - only fetch on specific actions
 
   const handleAccordionChange = (value: string) => {
     if (value === 'transport') {
@@ -118,34 +115,56 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
   }
 
   const handleSubmit = async (data: HostFormValues) => {
+    setIsSubmitting(true)
     try {
       // Clean the payload before sending
-      const cleanedData = cleanPayload(data)
+      const payload = { ...data }
 
+      // If SingBox fragment is disabled, clear related fields
+      if (!payload.fragment_settings?.sing_box?.fragment && payload.fragment_settings?.sing_box) {
+        const singBox = payload.fragment_settings.sing_box!
+        ;(singBox as any).fragment_fallback_delay = undefined
+        ;(singBox as any).record_fragment = undefined
+      }
+
+      // Convert fragment_fallback_delay number to ms format
+      if (payload.fragment_settings?.sing_box?.fragment_fallback_delay) {
+        const delay = payload.fragment_settings.sing_box.fragment_fallback_delay
+        if (/^\d+$/.test(delay)) {
+          payload.fragment_settings.sing_box.fragment_fallback_delay = delay + 'ms'
+        }
+      }
+
+      const cleanedData = cleanPayload(payload)
       const response = await onSubmit(cleanedData)
       if (response.status >= 400) {
         throw new Error(`Operation failed with status: ${response.status}`)
       }
       handleModalOpenChange(false)
-      // The form reset is handled by the parent component
-      // Invalidate hosts query to refresh the list
       queryClient.invalidateQueries({
         queryKey: ['getHostsQueryKey'],
       })
     } catch (error) {
       console.error(error)
+    } finally {
+      setIsSubmitting(false)
     }
+  }
+
+  const handleCopy = (text: string) => {
+    copy(text)
+    toast.success(t('usersTable.copied'))
   }
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={handleModalOpenChange}>
-      <DialogContent className="w-full h-full max-w-2xl md:max-h-[95dvh]" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent className="h-full w-full max-w-2xl md:max-h-[95dvh]" onOpenAutoFocus={e => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle className={cn(dir === 'rtl' ? 'text-right' : 'text-left')}>{editingHost ? t('editHost.title') : t('hostsDialog.addHost')}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <div className="max-h-[80dvh] sm:max-h-[75dvh] overflow-y-auto pr-4 -mr-4 px-2 space-y-4">
+            <div className="-mr-4 max-h-[80dvh] space-y-4 overflow-y-auto px-2 pr-4 sm:max-h-[75dvh]">
               <FormField
                 control={form.control}
                 name="inbound_tag"
@@ -160,7 +179,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                       </FormControl>
                       <SelectContent dir="ltr">
                         {inbounds.map(tag => (
-                          <SelectItem className="px-4 cursor-pointer" value={tag} key={tag}>
+                          <SelectItem className="cursor-pointer px-4" value={tag} key={tag}>
                             {tag}
                           </SelectItem>
                         ))}
@@ -184,7 +203,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                             const option = statusOptions.find(opt => opt.value === status)
                             if (!option) return null
                             return (
-                              <span key={status} className="bg-muted/80 px-2 py-1 rounded-md text-sm flex items-center gap-2">
+                              <span key={status} className="flex items-center gap-2 rounded-md bg-muted/80 px-2 py-1 text-sm">
                                 {t(option.label)}
                                 <button
                                   type="button"
@@ -199,7 +218,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                             )
                           })
                         ) : (
-                          <span className="text-muted-foreground text-sm">{t('hostsDialog.noStatus')}</span>
+                          <span className="text-sm text-muted-foreground">{t('hostsDialog.noStatus')}</span>
                         )}
                       </div>
                       <Select
@@ -222,12 +241,12 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                             <SelectItem
                               key={option.value}
                               value={option.value}
-                              className="flex items-center gap-2 py-2 px-4 cursor-pointer focus:bg-accent"
+                              className="flex cursor-pointer items-center gap-2 px-4 py-2 focus:bg-accent"
                               disabled={field.value?.includes(option.value)}
                             >
-                              <div className="flex items-center gap-3 w-full">
+                              <div className="flex w-full items-center gap-3">
                                 <Checkbox checked={field.value?.includes(option.value)} className="h-4 w-4" />
-                                <span className="font-normal text-sm">{t(option.label)}</span>
+                                <span className="text-sm font-normal">{t(option.label)}</span>
                               </div>
                             </SelectItem>
                           ))}
@@ -259,63 +278,147 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                         </PopoverTrigger>
                         <PopoverContent className="w-[320px] p-3" side="right" align="start">
                           <div className="space-y-1.5">
-                            <h4 className="font-medium text-[12px] mb-2">{t('hostsDialog.variables.title')}</h4>
+                            <h4 className="mb-2 text-[12px] font-medium">{t('hostsDialog.variables.title')}</h4>
                             <div className="space-y-1">
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{SERVER_IP}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{SERVER_IP}')}
+                                  title={t('copy')}
+                                >
+                                  {'{SERVER_IP}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.server_ip')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{SERVER_IPV6}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{SERVER_IPV6}')}
+                                  title={t('copy')}
+                                >
+                                  {'{SERVER_IPV6}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.server_ipv6')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{USERNAME}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{USERNAME}')}
+                                  title={t('copy')}
+                                >
+                                  {'{USERNAME}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.username')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{DATA_USAGE}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{DATA_USAGE}')}
+                                  title={t('copy')}
+                                >
+                                  {'{DATA_USAGE}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.data_usage')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{DATA_LEFT}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{DATA_LEFT}')}
+                                  title={t('copy')}
+                                >
+                                  {'{DATA_LEFT}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.data_left')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{DATA_LIMIT}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{DATA_LIMIT}')}
+                                  title={t('copy')}
+                                >
+                                  {'{DATA_LIMIT}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.data_limit')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{DAYS_LEFT}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{DAYS_LEFT}')}
+                                  title={t('copy')}
+                                >
+                                  {'{DAYS_LEFT}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.days_left')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{EXPIRE_DATE}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{EXPIRE_DATE}')}
+                                  title={t('copy')}
+                                >
+                                  {'{EXPIRE_DATE}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.expire_date')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{JALALI_EXPIRE_DATE}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{JALALI_EXPIRE_DATE}')}
+                                  title={t('copy')}
+                                >
+                                  {'{JALALI_EXPIRE_DATE}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.jalali_expire_date')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{TIME_LEFT}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{TIME_LEFT}')}
+                                  title={t('copy')}
+                                >
+                                  {'{TIME_LEFT}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.time_left')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{STATUS_TEXT}'}</code>
-                                <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.status_text')}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{STATUS_EMOJI}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{STATUS_EMOJI}')}
+                                  title={t('copy')}
+                                >
+                                  {'{STATUS_EMOJI}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.status_emoji')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{PROTOCOL}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{PROTOCOL}')}
+                                  title={t('copy')}
+                                >
+                                  {'{PROTOCOL}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.protocol')}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{TRANSPORT}'}</code>
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{TRANSPORT}')}
+                                  title={t('copy')}
+                                >
+                                  {'{TRANSPORT}'}
+                                </code>
                                 <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.transport')}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <code
+                                  className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                  onClick={() => handleCopy('{ADMIN_USERNAME}')}
+                                  title={t('copy')}
+                                >
+                                  {'{ADMIN_USERNAME}'}
+                                </code>
+                                <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.admin_username')}</span>
                               </div>
                             </div>
                           </div>
@@ -330,8 +433,8 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                 )}
               />
 
-              <div className="flex  gap-4 justify-between">
-                <div className="flex-[2] min-h-[100px]">
+              <div className="flex justify-between gap-4">
+                <div className="min-h-[100px] flex-[2]">
                   <FormField
                     control={form.control}
                     name="address"
@@ -349,63 +452,147 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                               </PopoverTrigger>
                               <PopoverContent className="w-[320px] p-3" side="right" align="start" sideOffset={5}>
                                 <div className="space-y-1.5">
-                                  <h4 className="font-medium text-[12px] mb-2">{t('hostsDialog.variables.title')}</h4>
+                                  <h4 className="mb-2 text-[12px] font-medium">{t('hostsDialog.variables.title')}</h4>
                                   <div className="space-y-1">
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{SERVER_IP}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{SERVER_IP}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{SERVER_IP}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.server_ip')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{SERVER_IPV6}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{SERVER_IPV6}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{SERVER_IPV6}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.server_ipv6')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{USERNAME}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{USERNAME}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{USERNAME}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.username')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{DATA_USAGE}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{DATA_USAGE}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{DATA_USAGE}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.data_usage')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{DATA_LEFT}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{DATA_LEFT}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{DATA_LEFT}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.data_left')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{DATA_LIMIT}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{DATA_LIMIT}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{DATA_LIMIT}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.data_limit')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{DAYS_LEFT}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{DAYS_LEFT}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{DAYS_LEFT}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.days_left')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{EXPIRE_DATE}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{EXPIRE_DATE}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{EXPIRE_DATE}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.expire_date')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{JALALI_EXPIRE_DATE}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{JALALI_EXPIRE_DATE}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{JALALI_EXPIRE_DATE}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.jalali_expire_date')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{TIME_LEFT}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{TIME_LEFT}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{TIME_LEFT}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.time_left')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{STATUS_TEXT}'}</code>
-                                      <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.status_text')}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{STATUS_EMOJI}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{STATUS_EMOJI}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{STATUS_EMOJI}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.status_emoji')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{PROTOCOL}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{PROTOCOL}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{PROTOCOL}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.protocol')}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                      <code className="text-[11px] bg-muted/50 px-1.5 py-0.5 rounded-sm">{'{TRANSPORT}'}</code>
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{TRANSPORT}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{TRANSPORT}'}
+                                      </code>
                                       <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.transport')}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <code
+                                        className="cursor-pointer rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px] transition-colors hover:bg-muted"
+                                        onClick={() => handleCopy('{ADMIN_USERNAME}')}
+                                        title={t('copy')}
+                                      >
+                                        {'{ADMIN_USERNAME}'}
+                                      </code>
+                                      <span className="text-[11px] text-muted-foreground">{t('hostsDialog.variables.admin_username')}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -421,7 +608,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                     }}
                   />
                 </div>
-                <div className="flex-1 min-h-[110px]">
+                <div className="min-h-[110px] flex-1">
                   <FormField
                     control={form.control}
                     name="port"
@@ -442,12 +629,13 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                         </div>
                         <FormControl>
                           <Input
+                            placeholder="443"
                             isError={!!form.formState.errors.port}
                             type="number"
                             {...field}
                             onChange={e => {
                               const val = e.target.value
-                              field.onChange(val === '' ? null : Number.parseInt(val, 10))
+                              field.onChange(val === '' ? '' : Number.parseInt(val, 10))
                             }}
                             value={field.value === null || field.value === undefined ? '' : field.value}
                           />
@@ -459,8 +647,8 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                 </div>
               </div>
 
-              <Accordion type="single" collapsible value={openSection} onValueChange={handleAccordionChange} className="w-full flex flex-col gap-y-6 mb-6 !mt-0">
-                <AccordionItem className="border px-4 rounded-sm [&_[data-state=open]]:no-underline [&_[data-state=closed]]:no-underline" value="network">
+              <Accordion type="single" collapsible value={openSection} onValueChange={handleAccordionChange} className="!mt-0 mb-6 flex w-full flex-col gap-y-6">
+                <AccordionItem className="rounded-sm border px-4 [&_[data-state=closed]]:no-underline [&_[data-state=open]]:no-underline" value="network">
                   <AccordionTrigger>
                     <div className="flex items-center gap-2">
                       <GlobeLock className="h-4 w-4" />
@@ -469,7 +657,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                   </AccordionTrigger>
                   <AccordionContent className="px-2">
                     <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <FormField
                           control={form.control}
                           name="host"
@@ -530,18 +718,17 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                         control={form.control}
                         name="random_user_agent"
                         render={({ field }) => (
-                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                    onClick={() => field.onChange(!field.value)}>
+                          <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
                             <div className="space-y-0.5">
                               <FormLabel className="text-base">{t('hostsDialog.randomUserAgent')}</FormLabel>
                             </div>
                             <FormControl>
                               <div onClick={e => e.stopPropagation()}>
-                                <Switch checked={field.value} onCheckedChange={field.onChange}/>
+                                <Switch checked={field.value} onCheckedChange={field.onChange} />
                               </div>
                             </FormControl>
                           </FormItem>
-                          )}
+                        )}
                       />
 
                       <div className="space-y-2">
@@ -629,7 +816,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem className="border px-4 rounded-sm [&_[data-state=open]]:no-underline [&_[data-state=closed]]:no-underline" value="security">
+                <AccordionItem className="rounded-sm border px-4 [&_[data-state=closed]]:no-underline [&_[data-state=open]]:no-underline" value="security">
                   <AccordionTrigger>
                     <div className="flex items-center gap-2">
                       <Lock className="h-4 w-4" />
@@ -638,7 +825,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                   </AccordionTrigger>
                   <AccordionContent className="px-2">
                     <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <FormField
                           control={form.control}
                           name="security"
@@ -701,14 +888,14 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                         />
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <FormField
                           control={form.control}
                           name="alpn"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>{t('hostsDialog.alpn')}</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
+                              <Select onValueChange={value => field.onChange(value === 'default' ? '' : value)} value={field.value || 'default'}>
                                 <FormControl>
                                   <SelectTrigger>
                                     <SelectValue placeholder={t('hostsDialog.alpn')} />
@@ -753,6 +940,8 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                                   <SelectItem value="qq">{t('qq')}</SelectItem>
                                   <SelectItem value="random">{t('random')}</SelectItem>
                                   <SelectItem value="randomized">{t('randomized')}</SelectItem>
+                                  <SelectItem value="randomizednoalpn">{t('randomizednoalpn')}</SelectItem>
+                                  <SelectItem value="unsafe">{t('unsafe')}</SelectItem>
                                 </SelectContent>
                               </Select>
                               <FormMessage />
@@ -765,42 +954,66 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                         control={form.control}
                         name="allowinsecure"
                         render={({ field }) => (
-                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                    onClick={() => field.onChange(!field.value)}>
+                          <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
                             <div className="space-y-0.5">
                               <FormLabel className="text-base">{t('hostsDialog.allowInsecure')}</FormLabel>
                             </div>
                             <FormControl>
                               <div onClick={e => e.stopPropagation()}>
-                                <Switch checked={field.value} onCheckedChange={field.onChange}/>
+                                <Switch checked={field.value} onCheckedChange={field.onChange} />
                               </div>
                             </FormControl>
                           </FormItem>
-                          )}
+                        )}
                       />
 
                       <FormField
                         control={form.control}
                         name="use_sni_as_host"
                         render={({ field }) => (
-                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                    onClick={() => field.onChange(!field.value)}>
+                          <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
                             <div className="space-y-0.5">
                               <FormLabel className="text-base">{t('hostsDialog.useSniAsHost')}</FormLabel>
                             </div>
                             <FormControl>
                               <div onClick={e => e.stopPropagation()}>
-                                <Switch checked={field.value} onCheckedChange={field.onChange}/>
+                                <Switch checked={field.value} onCheckedChange={field.onChange} />
                               </div>
                             </FormControl>
                           </FormItem>
-                          )}
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="ech_config_list"
+                        render={({ field }) => (
+                          <FormItem>
+                            <div className="flex items-center gap-2">
+                              <FormLabel>{t('hostsDialog.echConfigList')}</FormLabel>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button type="button" variant="ghost" size="icon" className="h-4 w-4 p-0 hover:bg-transparent">
+                                    <Info className="h-4 w-4 text-muted-foreground" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[320px] p-3" side="right" align="start" sideOffset={5}>
+                                  <p className="text-[11px] text-muted-foreground">{t('hostsDialog.echConfigList.info')}</p>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            <FormControl>
+                              <Input placeholder={t('hostsDialog.echConfigListPlaceholder')} {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
                     </div>
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem className="border px-4 rounded-sm [&_[data-state=open]]:no-underline [&_[data-state=closed]]:no-underline" value="transport">
+                <AccordionItem className="rounded-sm border px-4 [&_[data-state=closed]]:no-underline [&_[data-state=open]]:no-underline" value="transport">
                   <AccordionTrigger>
                     <div className="flex items-center gap-2">
                       <Network className="h-4 w-4" />
@@ -810,7 +1023,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                   <AccordionContent>
                     <div className="space-y-4">
                       <Tabs defaultValue="xhttp" className="w-full">
-                        <TabsList className="grid grid-cols-5 mb-4 gap-4 px-1 min-w-full overflow-x-auto">
+                        <TabsList className="mb-4 grid min-w-full grid-cols-5 gap-4 overflow-x-auto px-1">
                           <TabsTrigger className="px-2" value="xhttp">
                             XHTTP
                           </TabsTrigger>
@@ -830,7 +1043,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
 
                         {/* XHTTP Settings */}
                         <TabsContent dir={dir} value="xhttp" className="space-y-4 p-2">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <FormField
                               control={form.control}
                               name="transport_settings.xhttp_settings.mode"
@@ -859,14 +1072,13 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                               control={form.control}
                               name="transport_settings.xhttp_settings.no_grpc_header"
                               render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                          onClick={() => field.onChange(!field.value)}>
+                                <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
                                   <div className="space-y-0.5">
                                     <FormLabel className="text-base">{t('hostsDialog.xhttp.noGrpcHeader')}</FormLabel>
                                   </div>
                                   <FormControl>
                                     <div onClick={e => e.stopPropagation()}>
-                                      <Switch checked={field.value} onCheckedChange={field.onChange}/>
+                                      <Switch checked={field.value} onCheckedChange={field.onChange} />
                                     </div>
                                   </FormControl>
                                 </FormItem>
@@ -874,7 +1086,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                             />
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <FormField
                               control={form.control}
                               name="transport_settings.xhttp_settings.x_padding_bytes"
@@ -916,39 +1128,11 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                                 </FormItem>
                               )}
                             />
-
-                            <FormField
-                              control={form.control}
-                              name="transport_settings.xhttp_settings.sc_max_buffered_posts"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>{t('hostsDialog.xhttp.scMaxBufferedPosts')}</FormLabel>
-                                  <FormControl>
-                                    <Input {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-
-                            <FormField
-                              control={form.control}
-                              name="transport_settings.xhttp_settings.sc_stream_up_server_secs"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>{t('hostsDialog.xhttp.scStreamUpServerSecs')}</FormLabel>
-                                  <FormControl>
-                                    <Input {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
                           </div>
 
                           <div className="space-y-4">
                             <h4 className="text-sm font-medium">{t('hostsDialog.xhttp.xmux')}</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                               <FormField
                                 control={form.control}
                                 name="transport_settings.xhttp_settings.xmux.max_concurrency"
@@ -1036,7 +1220,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                                 control={form.control}
                                 name="transport_settings.xhttp_settings.download_settings"
                                 render={({ field }) => (
-                                  <FormItem className="w-full col-span-2">
+                                  <FormItem className="col-span-2 w-full">
                                     <div className="flex items-center gap-2">
                                       <FormLabel>{t('hostsDialog.xhttp.downloadSettings')}</FormLabel>
                                       <Popover>
@@ -1086,19 +1270,18 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
 
                         {/* gRPC Settings */}
                         <TabsContent dir={dir} value="grpc" className="space-y-4 p-2">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <FormField
                               control={form.control}
                               name="transport_settings.grpc_settings.multi_mode"
                               render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                          onClick={() => field.onChange(!field.value)}>
+                                <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
                                   <div className="space-y-0.5">
                                     <FormLabel className="text-base">{t('hostsDialog.grpc.multiMode')}</FormLabel>
                                   </div>
                                   <FormControl>
                                     <div onClick={e => e.stopPropagation()}>
-                                      <Switch checked={field.value} onCheckedChange={field.onChange}/>
+                                      <Switch checked={field.value} onCheckedChange={field.onChange} />
                                     </div>
                                   </FormControl>
                                 </FormItem>
@@ -1165,7 +1348,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
 
                         {/* KCP Settings */}
                         <TabsContent dir={dir} value="kcp" className="space-y-4 p-2">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <FormField
                               control={form.control}
                               name="transport_settings.kcp_settings.header"
@@ -1294,7 +1477,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
 
                         {/* TCP Settings */}
                         <TabsContent dir={dir} value="tcp" className="space-y-4 p-2">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <FormField
                               control={form.control}
                               name="transport_settings.tcp_settings.header"
@@ -1322,7 +1505,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                             <>
                               <div className="space-y-4 p-2">
                                 <h4 className="text-sm font-medium">{t('hostsDialog.tcp.request.title')}</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                   <FormField
                                     control={form.control}
                                     name="transport_settings.tcp_settings.request.version"
@@ -1460,7 +1643,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
 
                               <div className="space-y-4 p-2">
                                 <h4 className="text-sm font-medium">{t('hostsDialog.tcp.response.title')}</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                   <FormField
                                     control={form.control}
                                     name="transport_settings.tcp_settings.response.version"
@@ -1681,7 +1864,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
 
                         {/* WebSocket Settings */}
                         <TabsContent dir={dir} value="websocket" className="space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <FormField
                               control={form.control}
                               name="transport_settings.websocket_settings.heartbeatPeriod"
@@ -1702,7 +1885,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem className="border px-4 rounded-sm [&_[data-state=open]]:no-underline [&_[data-state=closed]]:no-underline" value="camouflag">
+                <AccordionItem className="rounded-sm border px-4 [&_[data-state=closed]]:no-underline [&_[data-state=open]]:no-underline" value="camouflag">
                   <AccordionTrigger>
                     <div className="flex items-center gap-2">
                       <ChevronsLeftRightEllipsis className="h-4 w-4" />
@@ -1710,180 +1893,261 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="px-2">
-                    <div className="space-y-6">
-                      {/* Fragment Settings */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-medium flex items-center gap-2">
-                            {t('hostsDialog.fragment.title')}
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button type="button" variant="ghost" size="icon" className="h-4 w-4 p-0 hover:bg-transparent">
-                                  <Info className="h-4 w-4 text-muted-foreground" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[320px] p-3" side="right" align="start" sideOffset={5}>
-                                <div className="space-y-1.5">
-                                  <p className="text-[11px] text-muted-foreground">{t('hostsDialog.fragment.info')}</p>
-                                  <p className="text-[11px] text-muted-foreground">{t('hostsDialog.fragment.info.attention')}</p>
-                                  <p className="text-[11px] text-muted-foreground">{t('hostsDialog.fragment.info.examples')}</p>
-                                  <p className="text-[11px] overflow-hidden text-muted-foreground">100-200,10-20,tlshello 100-200,10-20,1-3</p>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          </h4>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4">
-                          <FormField
-                            control={form.control}
-                            name="fragment_settings.xray.packets"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>{t('hostsDialog.fragment.packets')}</FormLabel>
-                                <FormControl>
-                                  <Input placeholder={t('hostsDialog.fragment.packetsPlaceholder')} {...field} value={field.value || ''} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="fragment_settings.xray.length"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>{t('hostsDialog.fragment.length')}</FormLabel>
-                                <FormControl>
-                                  <Input placeholder={t('hostsDialog.fragment.lengthPlaceholder')} {...field} value={field.value || ''} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="fragment_settings.xray.interval"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>{t('hostsDialog.fragment.interval')}</FormLabel>
-                                <FormControl>
-                                  <Input placeholder={t('hostsDialog.fragment.intervalPlaceholder')} {...field} value={field.value || ''} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Noise Settings */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-medium">{t('hostsDialog.noise.title')}</h4>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button type="button" variant="ghost" size="icon" className="h-4 w-4 p-0 hover:bg-transparent">
-                                  <Info className="h-4 w-4 text-muted-foreground" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[320px] p-3" side="right" align="start" sideOffset={5}>
-                                <div className="space-y-1.5">
-                                  <p className="text-[11px] text-muted-foreground">{t('hostsDialog.noise.info')}</p>
-                                  <p className="text-[11px] text-muted-foreground">{t('hostsDialog.noise.info.attention')}</p>
-                                  <p className="text-[11px] text-muted-foreground">{t('hostsDialog.noise.info.examples')}</p>
-                                  <p className="text-[11px] overflow-hidden text-muted-foreground">rand:10-20,10-20 rand:10-20,10-20 &base64:7nQBAAABAAAAAAAABnQtcmluZwZtc2VkZ2UDbmV0AAABAAE=,10-25</p>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
+                    <Tabs defaultValue="xray" className="w-full">
+                      <TabsList className="mb-4 grid w-full grid-cols-2">
+                        <TabsTrigger value="xray">Xray</TabsTrigger>
+                        <TabsTrigger value="singbox">SingBox</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="xray">
+                        <div className="space-y-6">
+                          {/* Fragment Settings */}
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h4 className="flex items-center gap-2 text-sm font-medium">
+                                {t('hostsDialog.fragment.title')}
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button type="button" variant="ghost" size="icon" className="h-4 w-4 p-0 hover:bg-transparent">
+                                      <Info className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-[320px] p-3" side="right" align="start" sideOffset={5}>
+                                    <div className="space-y-1.5">
+                                      <p className="text-[11px] text-muted-foreground">{t('hostsDialog.fragment.info')}</p>
+                                      <p className="text-[11px] text-muted-foreground">{t('hostsDialog.fragment.info.attention')}</p>
+                                      <p className="text-[11px] text-muted-foreground">{t('hostsDialog.fragment.info.examples')}</p>
+                                      <p className="overflow-hidden text-[11px] text-muted-foreground">100-200,10-20,tlshello 100-200,10-20,1-3</p>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              </h4>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="fragment_settings.xray.packets"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>{t('hostsDialog.fragment.packets')}</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder={t('hostsDialog.fragment.packetsPlaceholder')} {...field} value={field.value || ''} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="fragment_settings.xray.length"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>{t('hostsDialog.fragment.length')}</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder={t('hostsDialog.fragment.lengthPlaceholder')} {...field} value={field.value || ''} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="fragment_settings.xray.interval"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>{t('hostsDialog.fragment.interval')}</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder={t('hostsDialog.fragment.intervalPlaceholder')} {...field} value={field.value || ''} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
                           </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => {
-                              const currentNoiseSettings = form.getValues('noise_settings.xray') || []
-                              form.setValue('noise_settings.xray', [...currentNoiseSettings, { type: '', packet: '', delay: '' }], {
-                                shouldDirty: true,
-                                shouldTouch: true,
-                              })
-                            }}
-                            title={t('hostsDialog.noise.addNoise')}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <div className="space-y-2">
-                          {(form.watch('noise_settings.xray') || []).map((_, index) => (
-                            <div key={index} className="flex items-center justify-between gap-2">
+
+                          {/* Noise Settings */}
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <Select
-                                  value={form.watch(`noise_settings.xray.${index}.type`) || ''}
-                                  onValueChange={value => {
-                                    form.setValue(`noise_settings.xray.${index}.type`, value, {
-                                      shouldDirty: true,
-                                      shouldTouch: true,
-                                    })
-                                  }}
-                                >
-                                  <SelectTrigger className="w-[120px]">
-                                    <SelectValue placeholder="Type" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="rand">rand</SelectItem>
-                                    <SelectItem value="str">str</SelectItem>
-                                    <SelectItem value="base64">base64</SelectItem>
-                                    <SelectItem value="hex">hex</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <Input
-                                  placeholder={t('hostsDialog.noise.packetPlaceholder')}
-                                  value={form.watch(`noise_settings.xray.${index}.packet`) || ''}
-                                  onChange={e => {
-                                    form.setValue(`noise_settings.xray.${index}.packet`, e.target.value, {
-                                      shouldDirty: true,
-                                      shouldTouch: true,
-                                    })
-                                  }}
-                                />
-                                <Input
-                                  placeholder={t('hostsDialog.noise.delayPlaceholder')}
-                                  value={form.watch(`noise_settings.xray.${index}.delay`) || ''}
-                                  onChange={e => {
-                                    form.setValue(`noise_settings.xray.${index}.delay`, e.target.value, {
-                                      shouldDirty: true,
-                                      shouldTouch: true,
-                                    })
-                                  }}
-                                />
+                                <h4 className="text-sm font-medium">{t('hostsDialog.noise.title')}</h4>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button type="button" variant="ghost" size="icon" className="h-4 w-4 p-0 hover:bg-transparent">
+                                      <Info className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-[320px] p-3" side="right" align="start" sideOffset={5}>
+                                    <div className="space-y-1.5">
+                                      <p className="text-[11px] text-muted-foreground">{t('hostsDialog.noise.info')}</p>
+                                      <p className="text-[11px] text-muted-foreground">{t('hostsDialog.noise.info.attention')}</p>
+                                      <p className="text-[11px] text-muted-foreground">{t('hostsDialog.noise.info.examples')}</p>
+                                      <p className="overflow-hidden text-[11px] text-muted-foreground">
+                                        rand:10-20,10-20 rand:10-20,10-20 &base64:7nQBAAABAAAAAAAABnQtcmluZwZtc2VkZ2UDbmV0AAABAAE=,10-25
+                                      </p>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
                               </div>
                               <Button
                                 type="button"
-                                variant="ghost"
+                                variant="outline"
                                 size="icon"
-                                className="h-8 w-8 border-red-500"
+                                className="h-6 w-6"
                                 onClick={() => {
-                                  const currentNoiseSettings = [...(form.getValues('noise_settings.xray') || [])]
-                                  currentNoiseSettings.splice(index, 1)
-                                  form.setValue('noise_settings.xray', currentNoiseSettings, {
+                                  const currentNoiseSettings = form.getValues('noise_settings.xray') || []
+                                  form.setValue('noise_settings.xray', [...currentNoiseSettings, { type: '', packet: '', delay: '' }], {
                                     shouldDirty: true,
                                     shouldTouch: true,
                                   })
                                 }}
-                                title={t('hostsDialog.noise.removeNoise')}
+                                title={t('hostsDialog.noise.addNoise')}
                               >
-                                <Trash2 className="h-4 w-4 text-red-500" />
+                                <Plus className="h-4 w-4" />
                               </Button>
                             </div>
-                          ))}
+                            <div className="space-y-2">
+                              {(form.watch('noise_settings.xray') || []).map((_, index) => (
+                                <div key={index} className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <Select
+                                      value={form.watch(`noise_settings.xray.${index}.type`) || ''}
+                                      onValueChange={value => {
+                                        form.setValue(`noise_settings.xray.${index}.type`, value, {
+                                          shouldDirty: true,
+                                          shouldTouch: true,
+                                        })
+                                      }}
+                                    >
+                                      <SelectTrigger className="w-[120px]">
+                                        <SelectValue placeholder="Type" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="rand">rand</SelectItem>
+                                        <SelectItem value="str">str</SelectItem>
+                                        <SelectItem value="base64">base64</SelectItem>
+                                        <SelectItem value="hex">hex</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <Input
+                                      placeholder="Packet"
+                                      value={form.watch(`noise_settings.xray.${index}.packet`) || ''}
+                                      onChange={e =>
+                                        form.setValue(`noise_settings.xray.${index}.packet`, e.target.value, {
+                                          shouldDirty: true,
+                                          shouldTouch: true,
+                                        })
+                                      }
+                                    />
+                                    <Input
+                                      placeholder="Delay"
+                                      value={form.watch(`noise_settings.xray.${index}.delay`) || ''}
+                                      onChange={e =>
+                                        form.setValue(`noise_settings.xray.${index}.delay`, e.target.value, {
+                                          shouldDirty: true,
+                                          shouldTouch: true,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 border-red-500"
+                                    onClick={() => {
+                                      const currentNoiseSettings = form.getValues('noise_settings.xray') || []
+                                      form.setValue(
+                                        'noise_settings.xray',
+                                        currentNoiseSettings.filter((_, i) => i !== index),
+                                        {
+                                          shouldDirty: true,
+                                          shouldTouch: true,
+                                        },
+                                      )
+                                    }}
+                                    title={t('hostsDialog.noise.removeNoise')}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      </TabsContent>
+                      <TabsContent value="singbox">
+                        <div className="space-y-6">
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h4 className="flex items-center gap-2 text-sm font-medium">{t('hostsDialog.fragment.title')}</h4>
+                            </div>
+                            <div className="grid grid-cols-1 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="fragment_settings.sing_box.fragment"
+                                render={({ field }) => (
+                                  <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
+                                    <div className="space-y-0.5">
+                                      <FormLabel className="text-base">{t('hostsDialog.fragment.fragment')}</FormLabel>
+                                    </div>
+                                    <FormControl>
+                                      <div onClick={e => e.stopPropagation()}>
+                                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                      </div>
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                              {form.watch('fragment_settings.sing_box.fragment') && (
+                                <>
+                                  <FormField
+                                    control={form.control}
+                                    name="fragment_settings.sing_box.fragment_fallback_delay"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>{t('hostsDialog.fragment.fallbackDelay')}</FormLabel>
+                                        <FormControl>
+                                          <Input 
+                                            placeholder="e.g. 100" 
+                                            {...field} 
+                                            value={field.value ? field.value.replace('ms', '') : ''} 
+                                            onChange={(e) => {
+                                              const value = e.target.value
+                                              field.onChange(value)
+                                            }}
+                                            title="Enter a number (e.g., 100)"
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                  <FormField
+                                    control={form.control}
+                                    name="fragment_settings.sing_box.record_fragment"
+                                    render={({ field }) => (
+                                      <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
+                                        <div className="space-y-0.5">
+                                          <FormLabel className="text-base">{t('hostsDialog.fragment.recordFragment')}</FormLabel>
+                                        </div>
+                                        <FormControl>
+                                          <div onClick={e => e.stopPropagation()}>
+                                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                          </div>
+                                        </FormControl>
+                                      </FormItem>
+                                    )}
+                                  />
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </TabsContent>
+                    </Tabs>
                   </AccordionContent>
                 </AccordionItem>
-
-                <AccordionItem className="border px-4 rounded-sm [&_[data-state=open]]:no-underline [&_[data-state=closed]]:no-underline" value="mux">
+                <AccordionItem className="rounded-sm border px-4 [&_[data-state=closed]]:no-underline [&_[data-state=open]]:no-underline" value="mux">
                   <AccordionTrigger>
                     <div className="flex items-center gap-2">
                       <Cable className="h-4 w-4" />
@@ -1893,7 +2157,7 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                   <AccordionContent className="px-2">
                     <div className="space-y-4">
                       <Tabs defaultValue="xray" className="w-full">
-                        <TabsList className="grid grid-cols-3 mb-4">
+                        <TabsList className="mb-4 grid grid-cols-3">
                           <TabsTrigger value="xray">Xray</TabsTrigger>
                           <TabsTrigger value="sing_box">Sing-box</TabsTrigger>
                           <TabsTrigger value="clash">Clash</TabsTrigger>
@@ -1903,80 +2167,78 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                         <TabsContent dir={dir} value="xray">
                           <div className="space-y-4">
                             <FormField
-                                control={form.control}
-                                name="mux_settings.xray.enable"
-                                render={({ field }) => (
-                                    <FormItem
-                                        className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                        onClick={() => field.onChange(!field.value)}
-                                    >
-                                      <div className="space-y-0.5">
-                                        <FormLabel className="text-base">{t('hostsDialog.enableMux')}</FormLabel>
-                                      </div>
-                                      <FormControl>
-                                      <div onClick={e => e.stopPropagation()}>
-                                          <Switch checked={field.value || false} onCheckedChange={field.onChange}/>
-                                        </div>
-                                      </FormControl>
-                                    </FormItem>
-                                )}
+                              control={form.control}
+                              name="mux_settings.xray.enable"
+                              render={({ field }) => (
+                                <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
+                                  <div className="space-y-0.5">
+                                    <FormLabel className="text-base">{t('hostsDialog.enableMux')}</FormLabel>
+                                  </div>
+                                  <FormControl>
+                                    <div onClick={e => e.stopPropagation()}>
+                                      <Switch checked={field.value || false} onCheckedChange={field.onChange} />
+                                    </div>
+                                  </FormControl>
+                                </FormItem>
+                              )}
                             />
-                            {form.watch('mux_settings.xray.enable') === true ?
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <FormField
-                                control={form.control}
-                                name="mux_settings.xray.concurrency"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('hostsDialog.concurrency')}</FormLabel>
-                                    <FormControl>
-                                      <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
+                            {form.watch('mux_settings.xray.enable') === true ? (
+                              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <FormField
+                                  control={form.control}
+                                  name="mux_settings.xray.concurrency"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{t('hostsDialog.concurrency')}</FormLabel>
+                                      <FormControl>
+                                        <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
 
-                              <FormField
-                                control={form.control}
-                                name="mux_settings.xray.xudp_concurrency"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('hostsDialog.xudpConcurrency')}</FormLabel>
-                                    <FormControl>
-                                      <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
+                                <FormField
+                                  control={form.control}
+                                  name="mux_settings.xray.xudp_concurrency"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{t('hostsDialog.xudpConcurrency')}</FormLabel>
+                                      <FormControl>
+                                        <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
 
-                              <FormField
-                                control={form.control}
-                                name="mux_settings.xray.xudp_proxy_443"
-                                render={() => (
-                                  <FormItem>
-                                    <FormLabel>{t('hostsDialog.xudpProxy443')}</FormLabel>
-                                    <Select
-                                      value={form.watch('mux_settings.xray.xudp_proxy_443') ?? 'reject'}
-                                      onValueChange={value => {
-                                        form.setValue('mux_settings.xray.xudp_proxy_443', value)
-                                      }}
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue placeholder={t('host.xudp_proxy_443')} />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="reject">{t('host.reject')}</SelectItem>
-                                        <SelectItem value="allow">{t('host.allow')}</SelectItem>
-                                        <SelectItem value="skip">{t('host.skip')}</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div> :null}
+                                <FormField
+                                  control={form.control}
+                                  name="mux_settings.xray.xudp_proxy_443"
+                                  render={() => (
+                                    <FormItem>
+                                      <FormLabel>{t('hostsDialog.xudpProxy443')}</FormLabel>
+                                      <Select
+                                        value={form.watch('mux_settings.xray.xudp_proxy_443') ?? 'reject'}
+                                        onValueChange={value => {
+                                          form.setValue('mux_settings.xray.xudp_proxy_443', value)
+                                        }}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder={t('host.xudp_proxy_443')} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="reject">{t('host.reject')}</SelectItem>
+                                          <SelectItem value="allow">{t('host.allow')}</SelectItem>
+                                          <SelectItem value="skip">{t('host.skip')}</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                            ) : null}
                           </div>
                         </TabsContent>
 
@@ -1984,162 +2246,160 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                         <TabsContent dir={dir} value="sing_box">
                           <div className="space-y-4">
                             <FormField
-                                control={form.control}
-                                name="mux_settings.sing_box.enable"
-                                render={({ field }) => (
-                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                              onClick={() => field.onChange(!field.value)}>
-                                      <div className="space-y-0.5">
-                                        <FormLabel className="text-base">{t('hostsDialog.enableMux')}</FormLabel>
-                                      </div>
-                                      <FormControl>
-                                        <div onClick={e => e.stopPropagation()}>
-                                        <Switch checked={field.value || false} onCheckedChange={field.onChange} />
-                                        </div>
-                                      </FormControl>
-                                    </FormItem>
-                                )}
-                            />
-                            {form.watch('mux_settings.sing_box.enable') === true ?
-                                <>
-                            <FormField
                               control={form.control}
-                              name="mux_settings.sing_box.protocol"
+                              name="mux_settings.sing_box.enable"
                               render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>{t('hostsDialog.protocol')}</FormLabel>
-                                  <Select onValueChange={value => field.onChange(value === 'null' ? undefined : value)} value={field.value ?? 'null'}>
-                                    <FormControl>
-                                      <SelectTrigger>
-                                        <SelectValue placeholder={t('hostsDialog.selectProtocol')} />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                      <SelectItem value="none">{t('none')}</SelectItem>
-                                      <SelectItem value="h2mux">h2mux</SelectItem>
-                                      <SelectItem value="smux">smux</SelectItem>
-                                      <SelectItem value="yamux">yamux</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <FormField
-                                control={form.control}
-                                name="mux_settings.sing_box.max_connections"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('hostsDialog.maxConnections')}</FormLabel>
-                                    <FormControl>
-                                      <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : 0)} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="mux_settings.sing_box.min_streams"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('hostsDialog.minStreams')}</FormLabel>
-                                    <FormControl>
-                                      <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : 0)} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="mux_settings.sing_box.max_streams"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('hostsDialog.maxStreams')}</FormLabel>
-                                    <FormControl>
-                                      <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : 0)} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-
-                            <div className="space-y-4">
-                              <h4 className="text-sm font-medium">{t('hostsDialog.brutal.title')}</h4>
-                              <FormField
-                                  control={form.control}
-                                  name="mux_settings.sing_box.brutal.enable"
-                                  render={({ field }) => (
-                                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                                onClick={() => field.onChange(!field.value)}>
-                                        <div className="space-y-0.5">
-                                          <FormLabel className="text-base">{t("hostsDialog.brutal.enable")}</FormLabel>
-                                        </div>
-                                        <FormControl>
-                                          <div  onClick={e => e.stopPropagation()}>
-                                          <Switch checked={field.value || false} onCheckedChange={field.onChange} />
-                                          </div>
-                                        </FormControl>
-                                      </FormItem>
-                                  )}
-                              />
-                              {form.watch('mux_settings.sing_box.brutal.enable') === true ?
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <FormField
-                                  control={form.control}
-                                  name="mux_settings.sing_box.brutal.up_mbps"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>{t('hostsDialog.brutal.upMbps')}</FormLabel>
-                                      <FormControl>
-                                        <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : 0)} />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                <FormField
-                                  control={form.control}
-                                  name="mux_settings.sing_box.brutal.down_mbps"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>{t('hostsDialog.brutal.downMbps')}</FormLabel>
-                                      <FormControl>
-                                        <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : 0)} />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              </div>:null}
-                            </div>
-
-                            <FormField
-                              control={form.control}
-                              name="mux_settings.sing_box.padding"
-                              render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                          onClick={() => field.onChange(!field.value)}>
+                                <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
                                   <div className="space-y-0.5">
-                                    <FormLabel className="text-base">{t('hostsDialog.padding')}</FormLabel>
+                                    <FormLabel className="text-base">{t('hostsDialog.enableMux')}</FormLabel>
                                   </div>
                                   <FormControl>
                                     <div onClick={e => e.stopPropagation()}>
-                                    <Switch checked={field.value || false} onCheckedChange={field.onChange} />
+                                      <Switch checked={field.value || false} onCheckedChange={field.onChange} />
                                     </div>
                                   </FormControl>
                                 </FormItem>
                               )}
                             />
-                                </>
-                                :null}
+                            {form.watch('mux_settings.sing_box.enable') === true ? (
+                              <>
+                                <FormField
+                                  control={form.control}
+                                  name="mux_settings.sing_box.protocol"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{t('hostsDialog.protocol')}</FormLabel>
+                                      <Select onValueChange={value => field.onChange(value === 'null' ? undefined : value)} value={field.value ?? 'null'}>
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder={t('hostsDialog.selectProtocol')} />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="none">{t('none')}</SelectItem>
+                                          <SelectItem value="h2mux">h2mux</SelectItem>
+                                          <SelectItem value="smux">smux</SelectItem>
+                                          <SelectItem value="yamux">yamux</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                  <FormField
+                                    control={form.control}
+                                    name="mux_settings.sing_box.max_connections"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>{t('hostsDialog.maxConnections')}</FormLabel>
+                                        <FormControl>
+                                          <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : 0)} />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name="mux_settings.sing_box.min_streams"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>{t('hostsDialog.minStreams')}</FormLabel>
+                                        <FormControl>
+                                          <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : 0)} />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name="mux_settings.sing_box.max_streams"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>{t('hostsDialog.maxStreams')}</FormLabel>
+                                        <FormControl>
+                                          <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : 0)} />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+
+                                <div className="space-y-4">
+                                  <h4 className="text-sm font-medium">{t('hostsDialog.brutal.title')}</h4>
+                                  <FormField
+                                    control={form.control}
+                                    name="mux_settings.sing_box.brutal.enable"
+                                    render={({ field }) => (
+                                      <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
+                                        <div className="space-y-0.5">
+                                          <FormLabel className="text-base">{t('hostsDialog.brutal.enable')}</FormLabel>
+                                        </div>
+                                        <FormControl>
+                                          <div onClick={e => e.stopPropagation()}>
+                                            <Switch checked={field.value || false} onCheckedChange={field.onChange} />
+                                          </div>
+                                        </FormControl>
+                                      </FormItem>
+                                    )}
+                                  />
+                                  {form.watch('mux_settings.sing_box.brutal.enable') === true ? (
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                      <FormField
+                                        control={form.control}
+                                        name="mux_settings.sing_box.brutal.up_mbps"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel>{t('hostsDialog.brutal.upMbps')}</FormLabel>
+                                            <FormControl>
+                                              <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : 0)} />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+
+                                      <FormField
+                                        control={form.control}
+                                        name="mux_settings.sing_box.brutal.down_mbps"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel>{t('hostsDialog.brutal.downMbps')}</FormLabel>
+                                            <FormControl>
+                                              <Input type="number" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : 0)} />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+                                  ) : null}
+                                </div>
+
+                                <FormField
+                                  control={form.control}
+                                  name="mux_settings.sing_box.padding"
+                                  render={({ field }) => (
+                                    <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
+                                      <div className="space-y-0.5">
+                                        <FormLabel className="text-base">{t('hostsDialog.padding')}</FormLabel>
+                                      </div>
+                                      <FormControl>
+                                        <div onClick={e => e.stopPropagation()}>
+                                          <Switch checked={field.value || false} onCheckedChange={field.onChange} />
+                                        </div>
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                              </>
+                            ) : null}
                           </div>
                         </TabsContent>
 
@@ -2147,197 +2407,194 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
                         <TabsContent dir={dir} value="clash">
                           <div className="space-y-4">
                             <FormField
-                                control={form.control}
-                                name="mux_settings.clash.enable"
-                                render={({ field }) => (
-                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                              onClick={() => field.onChange(!field.value)}>
-                                      <div className="space-y-0.5">
-                                        <FormLabel className="text-base">{t('hostsDialog.enableMux')}</FormLabel>
-                                      </div>
-                                      <FormControl>
-                                        <div onClick={e => e.stopPropagation()}>
-                                          <Switch checked={field.value || false} onCheckedChange={field.onChange}/>
-                                        </div>
-                                      </FormControl>
-                                    </FormItem>
-                                )}
-                            />
-                            {form.watch('mux_settings.clash.enable') === true ?
-                            <>
-                            <FormField
                               control={form.control}
-                              name="mux_settings.clash.protocol"
+                              name="mux_settings.clash.enable"
                               render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>{t('hostsDialog.protocol')}</FormLabel>
-                                  <Select onValueChange={value => field.onChange(value === 'null' ? undefined : value)} value={field.value ?? 'null'}>
-                                    <FormControl>
-                                      <SelectTrigger>
-                                        <SelectValue placeholder={t('hostsDialog.selectProtocol')} />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                      <SelectItem value="none">{t('none')}</SelectItem>
-                                      <SelectItem value="smux">smux</SelectItem>
-                                      <SelectItem value="yamux">yamux</SelectItem>
-                                      <SelectItem value="h2mux">h2mux</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <FormMessage />
+                                <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
+                                  <div className="space-y-0.5">
+                                    <FormLabel className="text-base">{t('hostsDialog.enableMux')}</FormLabel>
+                                  </div>
+                                  <FormControl>
+                                    <div onClick={e => e.stopPropagation()}>
+                                      <Switch checked={field.value || false} onCheckedChange={field.onChange} />
+                                    </div>
+                                  </FormControl>
                                 </FormItem>
                               )}
                             />
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <FormField
-                                control={form.control}
-                                name="mux_settings.clash.max_connections"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('hostsDialog.maxConnections')}</FormLabel>
-                                    <FormControl>
-                                      <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="mux_settings.clash.min_streams"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('hostsDialog.minStreams')}</FormLabel>
-                                    <FormControl>
-                                      <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="mux_settings.clash.max_streams"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('hostsDialog.maxStreams')}</FormLabel>
-                                    <FormControl>
-                                      <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-
-                            <div className="space-y-4">
-                              <h4 className="text-sm font-medium">{t('hostsDialog.brutal.title')}</h4>
-                              <FormField
+                            {form.watch('mux_settings.clash.enable') === true ? (
+                              <>
+                                <FormField
                                   control={form.control}
-                                  name="mux_settings.clash.brutal.enable"
+                                  name="mux_settings.clash.protocol"
                                   render={({ field }) => (
-                                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                                onClick={() => field.onChange(!field.value)}>
+                                    <FormItem>
+                                      <FormLabel>{t('hostsDialog.protocol')}</FormLabel>
+                                      <Select onValueChange={value => field.onChange(value === 'null' ? undefined : value)} value={field.value ?? 'null'}>
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder={t('hostsDialog.selectProtocol')} />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="none">{t('none')}</SelectItem>
+                                          <SelectItem value="smux">smux</SelectItem>
+                                          <SelectItem value="yamux">yamux</SelectItem>
+                                          <SelectItem value="h2mux">h2mux</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                  <FormField
+                                    control={form.control}
+                                    name="mux_settings.clash.max_connections"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>{t('hostsDialog.maxConnections')}</FormLabel>
+                                        <FormControl>
+                                          <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name="mux_settings.clash.min_streams"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>{t('hostsDialog.minStreams')}</FormLabel>
+                                        <FormControl>
+                                          <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name="mux_settings.clash.max_streams"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>{t('hostsDialog.maxStreams')}</FormLabel>
+                                        <FormControl>
+                                          <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+
+                                <div className="space-y-4">
+                                  <h4 className="text-sm font-medium">{t('hostsDialog.brutal.title')}</h4>
+                                  <FormField
+                                    control={form.control}
+                                    name="mux_settings.clash.brutal.enable"
+                                    render={({ field }) => (
+                                      <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
                                         <div className="space-y-0.5">
-                                          <FormLabel className="text-base">{t("hostsDialog.brutal.enable")}</FormLabel>
+                                          <FormLabel className="text-base">{t('hostsDialog.brutal.enable')}</FormLabel>
                                         </div>
                                         <FormControl>
                                           <div onClick={e => e.stopPropagation()}>
-                                            <Switch checked={field.value || false} onCheckedChange={field.onChange}/>
+                                            <Switch checked={field.value || false} onCheckedChange={field.onChange} />
                                           </div>
                                         </FormControl>
                                       </FormItem>
-                                  )}
-                              />
-                              {form.watch('mux_settings.clash.brutal.enable') === true ?
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    )}
+                                  />
+                                  {form.watch('mux_settings.clash.brutal.enable') === true ? (
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                      <FormField
+                                        control={form.control}
+                                        name="mux_settings.clash.brutal.up_mbps"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel>{t('hostsDialog.brutal.upMbps')}</FormLabel>
+                                            <FormControl>
+                                              <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+
+                                      <FormField
+                                        control={form.control}
+                                        name="mux_settings.clash.brutal.down_mbps"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel>{t('hostsDialog.brutal.downMbps')}</FormLabel>
+                                            <FormControl>
+                                              <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+                                  ) : null}
+                                </div>
+
                                 <FormField
                                   control={form.control}
-                                  name="mux_settings.clash.brutal.up_mbps"
+                                  name="mux_settings.clash.padding"
                                   render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>{t('hostsDialog.brutal.upMbps')}</FormLabel>
+                                    <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
+                                      <div className="space-y-0.5">
+                                        <FormLabel className="text-base">{t('hostsDialog.padding')}</FormLabel>
+                                      </div>
                                       <FormControl>
-                                        <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
+                                        <div onClick={e => e.stopPropagation()}>
+                                          <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                                        </div>
                                       </FormControl>
-                                      <FormMessage />
                                     </FormItem>
                                   )}
                                 />
 
                                 <FormField
                                   control={form.control}
-                                  name="mux_settings.clash.brutal.down_mbps"
+                                  name="mux_settings.clash.statistic"
                                   render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>{t('hostsDialog.brutal.downMbps')}</FormLabel>
+                                    <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
+                                      <div className="space-y-0.5">
+                                        <FormLabel className="text-base">{t('hostsDialog.statistic')}</FormLabel>
+                                      </div>
                                       <FormControl>
-                                        <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : null)} />
+                                        <div onClick={e => e.stopPropagation()}>
+                                          <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                                        </div>
                                       </FormControl>
-                                      <FormMessage />
                                     </FormItem>
                                   )}
                                 />
-                              </div>:null}
-                            </div>
 
-                            <FormField
-                              control={form.control}
-                              name="mux_settings.clash.padding"
-                              render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                          onClick={() => field.onChange(!field.value)}>
-                                  <div className="space-y-0.5">
-                                    <FormLabel className="text-base">{t('hostsDialog.padding')}</FormLabel>
-                                  </div>
-                                  <FormControl>
-                                    <div onClick={e => e.stopPropagation()}>
-                                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange}/>
-                                    </div>
-                                    </FormControl>
-                                </FormItem>
-                              )}
-                            />
-
-                            <FormField
-                              control={form.control}
-                              name="mux_settings.clash.statistic"
-                              render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                          onClick={() => field.onChange(!field.value)}>
-                                  <div className="space-y-0.5">
-                                    <FormLabel className="text-base">{t('hostsDialog.statistic')}</FormLabel>
-                                  </div>
-                                  <FormControl>
-                                    <div onClick={e => e.stopPropagation()}>
-                                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange}/>
-                                    </div>
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-
-                            <FormField
-                              control={form.control}
-                              name="mux_settings.clash.only_tcp"
-                              render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 cursor-pointer"
-                                          onClick={() => field.onChange(!field.value)}>
-                                  <div className="space-y-0.5">
-                                    <FormLabel className="text-base">{t('hostsDialog.onlyTcp')}</FormLabel>
-                                  </div>
-                                  <FormControl>
-                                    <div onClick={e => e.stopPropagation()}>
-                                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange}/>
-                                    </div>
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                          </>:null}
+                                <FormField
+                                  control={form.control}
+                                  name="mux_settings.clash.only_tcp"
+                                  render={({ field }) => (
+                                    <FormItem className="flex cursor-pointer flex-row items-center justify-between rounded-lg border p-4" onClick={() => field.onChange(!field.value)}>
+                                      <div className="space-y-0.5">
+                                        <FormLabel className="text-base">{t('hostsDialog.onlyTcp')}</FormLabel>
+                                      </div>
+                                      <FormControl>
+                                        <div onClick={e => e.stopPropagation()}>
+                                          <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                                        </div>
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                              </>
+                            ) : null}
                           </div>
                         </TabsContent>
                       </Tabs>
@@ -2350,14 +2607,15 @@ const HostModal: React.FC<HostModalProps> = ({ isDialogOpen, onOpenChange, onSub
               <Button type="button" variant="outline" onClick={() => handleModalOpenChange(false)}>
                 {t('cancel')}
               </Button>
-              <Button type="submit">{editingHost ? t('edit') : t('create')}</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {editingHost ? t('edit') : t('create')}
+              </Button>
             </div>
           </form>
         </Form>
       </DialogContent>
     </Dialog>
-  )
+                          )
 }
 
 export default HostModal
-

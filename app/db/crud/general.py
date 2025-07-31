@@ -1,8 +1,8 @@
-from sqlalchemy import func, String, or_, select, text
+from sqlalchemy import String, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import DATABASE_DIALECT
-from app.db.models import TLS, System, JWT
+from app.db.models import JWT, System
 from app.models.stats import Period
 
 MYSQL_FORMATS = {
@@ -40,7 +40,7 @@ def get_datetime_add_expression(datetime_column, seconds: int):
     elif DATABASE_DIALECT == "postgresql":
         return datetime_column + func.make_interval(0, 0, 0, 0, 0, 0, seconds)
     elif DATABASE_DIALECT == "sqlite":
-        return func.datetime(datetime_column, f"+{seconds} seconds")
+        return func.datetime(func.strftime("%s", datetime_column) + seconds, "unixepoch")
 
     raise ValueError(f"Unsupported dialect: {DATABASE_DIALECT}")
 
@@ -53,7 +53,11 @@ def json_extract(column, path: str):
     """
     match DATABASE_DIALECT:
         case "postgresql":
-            return func.jsonb_path_query(column, path).cast(String)
+            keys = path.replace("$.", "").split(".")
+            expr = column
+            for key in keys:
+                expr = expr.op("->>")(key) if key == keys[-1] else expr.op("->")(key)
+            return expr.cast(String)
         case "mysql":
             return func.json_unquote(func.json_extract(column, path)).cast(String)
         case "sqlite":
@@ -97,16 +101,3 @@ async def get_jwt_secret_key(db: AsyncSession) -> str:
         str: JWT secret key.
     """
     return (await db.execute(select(JWT))).scalar_one_or_none().secret_key
-
-
-async def get_tls_certificate(db: AsyncSession) -> TLS:
-    """
-    Retrieves the TLS certificate.
-
-    Args:
-        db (AsyncSession): Database session.
-
-    Returns:
-        TLS: TLS certificate information.
-    """
-    return (await db.execute(select(TLS))).scalar_one_or_none()

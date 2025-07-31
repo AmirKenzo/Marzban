@@ -1,4 +1,3 @@
-import asyncio
 from datetime import timedelta
 
 from app import __version__
@@ -6,7 +5,7 @@ from app.core.manager import core_manager
 from app.db import AsyncSession
 from app.db.crud.admin import get_admin
 from app.db.crud.general import get_system_usage
-from app.db.crud.user import count_online_users, get_users_count
+from app.db.crud.user import count_online_users, get_users_count_by_status
 from app.db.models import UserStatus
 from app.models.admin import AdminDetails
 from app.models.system import SystemStats
@@ -23,32 +22,26 @@ class SystemOperation(BaseOperation):
         mem = memory_usage()
         cpu = cpu_usage()
 
-        system = await get_system_usage(db)
-
         admin_param = None
         if admin.is_sudo and admin_username:
             admin_param = await get_admin(db, admin_username)
         elif not admin.is_sudo:
-            admin_param = await get_admin(db, admin.username)
+            admin_param = admin
 
-        # Gather remaining async CRUD operations together
-        (
-            total_user,
-            active_users,
-            disabled_users,
-            on_hold_users,
-            expired_users,
-            limited_users,
-            online_users,
-        ) = await asyncio.gather(
-            get_users_count(db, admin=admin_param),
-            get_users_count(db, status=UserStatus.active, admin=admin_param),
-            get_users_count(db, status=UserStatus.disabled, admin=admin_param),
-            get_users_count(db, status=UserStatus.on_hold, admin=admin_param),
-            get_users_count(db, status=UserStatus.expired, admin=admin_param),
-            get_users_count(db, status=UserStatus.limited, admin=admin_param),
-            count_online_users(db, timedelta(minutes=2), admin_param),
-        )
+        if not admin_param:
+            system = await get_system_usage(db)
+            uplink = system.uplink
+            downlink = system.downlink
+        else:
+            uplink = 0
+            downlink = admin_param.used_traffic
+
+        admin_id = admin_param.id if admin_param else None
+
+        # Get user counts by status in a single query and online users count
+        statuses = [UserStatus.active, UserStatus.disabled, UserStatus.on_hold, UserStatus.expired, UserStatus.limited]
+        user_counts = await get_users_count_by_status(db, statuses, admin_id)
+        online_users = await count_online_users(db, timedelta(minutes=2), admin_id)
 
         return SystemStats(
             version=__version__,
@@ -56,15 +49,15 @@ class SystemOperation(BaseOperation):
             mem_used=mem.used,
             cpu_cores=cpu.cores,
             cpu_usage=cpu.percent,
-            total_user=total_user,
+            total_user=user_counts["total"],
             online_users=online_users,
-            active_users=active_users,
-            disabled_users=disabled_users,
-            expired_users=expired_users,
-            limited_users=limited_users,
-            on_hold_users=on_hold_users,
-            incoming_bandwidth=system.uplink,
-            outgoing_bandwidth=system.downlink,
+            active_users=user_counts[UserStatus.active.value],
+            disabled_users=user_counts[UserStatus.disabled.value],
+            expired_users=user_counts[UserStatus.expired.value],
+            limited_users=user_counts[UserStatus.limited.value],
+            on_hold_users=user_counts[UserStatus.on_hold.value],
+            incoming_bandwidth=uplink,
+            outgoing_bandwidth=downlink,
         )
 
     @staticmethod

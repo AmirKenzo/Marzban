@@ -1,32 +1,34 @@
 import asyncio
 from copy import deepcopy
-from datetime import datetime, timezone, timedelta, UTC
+from datetime import UTC, datetime, timedelta, timezone
 from enum import Enum
-from typing import Optional, List, Union
+from typing import List, Optional, Sequence
 
-from sqlalchemy import select, or_, and_, func, not_, delete
+from sqlalchemy import and_, case, delete, desc, func, not_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.functions import coalesce
 
+from app.db.compiles_types import DateDiff
 from app.db.models import (
-    User,
-    UserStatus,
     Admin,
-    UserDataLimitResetStrategy,
     Group,
+    NextPlan,
+    NodeUserUsage,
     NotificationReminder,
     ReminderType,
-    NodeUserUsage,
-    NextPlan,
+    User,
+    UserDataLimitResetStrategy,
+    UserStatus,
+    UserSubscriptionUpdate,
     UserUsageResetLogs,
 )
 from app.models.proxy import ProxyTable
-from app.models.stats import Period, UserUsageStatsList, UserUsageStat
+from app.models.stats import Period, UserUsageStat, UserUsageStatsList
 from app.models.user import UserCreate, UserModify
 from config import USERS_AUTODELETE_DAYS
 
-from .general import build_json_proxy_settings_search_condition, _build_trunc_expression
+from .general import _build_trunc_expression, build_json_proxy_settings_search_condition
 from .group import get_groups_by_ids
 
 
@@ -83,11 +85,13 @@ UsersSortingOptions = Enum(
         "data_limit": User.data_limit.asc(),
         "expire": User.expire.asc(),
         "created_at": User.created_at.asc(),
+        "edit_at": User.edit_at.asc(),
         "-username": User.username.desc(),
         "-used_traffic": User.used_traffic.desc(),
         "-data_limit": User.data_limit.desc(),
         "-expire": User.expire.desc(),
         "-created_at": User.created_at.desc(),
+        "-edit_at": User.edit_at.desc(),
     },
 )
 
@@ -203,28 +207,59 @@ async def get_expired_users(
 async def get_active_to_expire_users(db: AsyncSession) -> list[User]:
     stmt = select(User).where(User.status == UserStatus.active).where(User.is_expired)
 
-    users = list((await db.execute(stmt)).unique().scalars().all())
-    for user in users:
-        await load_user_attrs(user)
-    return users
+    return list((await db.execute(stmt)).unique().scalars().all())
 
 
 async def get_active_to_limited_users(db: AsyncSession) -> list[User]:
     stmt = select(User).where(User.status == UserStatus.active).where(User.is_limited)
 
-    users = list((await db.execute(stmt)).unique().scalars().all())
-    for user in users:
-        await load_user_attrs(user)
-    return users
+    return list((await db.execute(stmt)).unique().scalars().all())
 
 
 async def get_on_hold_to_active_users(db: AsyncSession) -> list[User]:
     stmt = select(User).where(User.status == UserStatus.on_hold).where(User.become_online)
 
-    users = list((await db.execute(stmt)).unique().scalars().all())
-    for user in users:
-        await load_user_attrs(user)
-    return users
+    return list((await db.execute(stmt)).unique().scalars().all())
+
+
+async def get_users_to_reset_data_usage(db: AsyncSession) -> list[User]:
+    """
+    Retrieves users whose data usage needs to be reset based on their reset strategy.
+    """
+    last_reset_subq = (
+        select(
+            UserUsageResetLogs.user_id,
+            func.max(UserUsageResetLogs.reset_at).label("last_reset_at"),
+        )
+        .group_by(UserUsageResetLogs.user_id)
+        .subquery()
+    )
+
+    last_reset_time = coalesce(last_reset_subq.c.last_reset_at, User.created_at)
+
+    reset_strategy_to_days = {
+        UserDataLimitResetStrategy.day: 1,
+        UserDataLimitResetStrategy.week: 7,
+        UserDataLimitResetStrategy.month: 30,
+        UserDataLimitResetStrategy.year: 365,
+    }
+
+    num_days_to_reset_case = case(
+        *((User.data_limit_reset_strategy == strategy, days) for strategy, days in reset_strategy_to_days.items()),
+        else_=None,
+    )
+
+    stmt = (
+        select(User)
+        .outerjoin(last_reset_subq, User.id == last_reset_subq.c.user_id)
+        .where(
+            User.status.in_([UserStatus.active, UserStatus.limited]),
+            User.data_limit_reset_strategy != UserDataLimitResetStrategy.no_reset,
+            DateDiff(func.now(), last_reset_time) >= num_days_to_reset_case,
+        )
+    )
+
+    return list((await db.execute(stmt)).unique().scalars().all())
 
 
 async def get_usage_percentage_reached_users(db: AsyncSession, percentage: int) -> list[User]:
@@ -289,7 +324,13 @@ async def get_days_left_reached_users(db: AsyncSession, days: int) -> list[User]
 
 
 async def get_user_usages(
-    db: AsyncSession, user_id: int, start: datetime, end: datetime, period: Period, node_id: int | None = None
+    db: AsyncSession,
+    user_id: int,
+    start: datetime,
+    end: datetime,
+    period: Period,
+    node_id: int | None = None,
+    group_by_node: bool = False,
 ) -> UserUsageStatsList:
     """
     Retrieves user usages within a specified date range.
@@ -306,28 +347,49 @@ async def get_user_usages(
 
     if node_id is not None:
         conditions.append(NodeUserUsage.node_id == node_id)
+    else:
+        node_id = -1
 
-    stmt = (
-        select(trunc_expr.label("period_start"), func.sum(NodeUserUsage.used_traffic).label("total_traffic"))
-        .where(and_(*conditions))
-        .group_by(trunc_expr)
-        .order_by(trunc_expr)
-    )
+    if group_by_node:
+        stmt = (
+            select(
+                trunc_expr.label("period_start"),
+                func.coalesce(NodeUserUsage.node_id, 0).label("node_id"),
+                func.sum(NodeUserUsage.used_traffic).label("total_traffic"),
+            )
+            .where(and_(*conditions))
+            .group_by(trunc_expr, NodeUserUsage.node_id)
+            .order_by(trunc_expr)
+        )
+
+    else:
+        stmt = (
+            select(trunc_expr.label("period_start"), func.sum(NodeUserUsage.used_traffic).label("total_traffic"))
+            .where(and_(*conditions))
+            .group_by(trunc_expr)
+            .order_by(trunc_expr)
+        )
 
     result = await db.execute(stmt)
-    return UserUsageStatsList(
-        period=period, start=start, end=end, stats=[UserUsageStat(**row) for row in result.mappings()]
-    )
+    stats = {}
+    for row in result.mappings():
+        row_dict = dict(row)
+        node_id_val = row_dict.pop("node_id", node_id)
+        if node_id_val not in stats:
+            stats[node_id_val] = []
+        stats[node_id_val].append(UserUsageStat(**row_dict))
+
+    return UserUsageStatsList(period=period, start=start, end=end, stats=stats)
 
 
-async def get_users_count(db: AsyncSession, status: UserStatus = None, admin: Admin = None) -> int:
+async def get_users_count(db: AsyncSession, status: UserStatus = None, admin_id: int = None) -> int:
     """
     Gets the total count of users with optional filters.
 
     Args:
         db (AsyncSession): Database session.
         status (UserStatus, optional): Filter by user status.
-        admin (Admin, optional): Filter by admin.
+        admin_id (int, optional): Filter by admin.
     Returns:
         int: Total count of users.
     """
@@ -336,14 +398,47 @@ async def get_users_count(db: AsyncSession, status: UserStatus = None, admin: Ad
     filters = []
     if status:
         filters.append(User.status == status)
-    if admin:
-        filters.append(User.admin_id == admin.id)
+    if admin_id:
+        filters.append(User.admin_id == admin_id)
 
     if filters:
         stmt = stmt.where(and_(*filters))
 
     result = await db.execute(stmt)
     return result.scalar()
+
+
+async def get_users_count_by_status(
+    db: AsyncSession, statuses: list[UserStatus], admin_id: int = None
+) -> dict[str, int]:
+    """
+    Gets count of users grouped by status in a single query.
+
+    Args:
+        db (AsyncSession): Database session.
+        statuses (list[UserStatus]): List of statuses to count.
+        admin_id (int, optional): Filter by admin.
+    Returns:
+        dict[str, int]: Dictionary with status counts and total.
+    """
+    stmt = select(User.status, func.count(User.id).label("count"))
+
+    filters = [User.status.in_(statuses)]
+    if admin_id:
+        filters.append(User.admin_id == admin_id)
+
+    stmt = stmt.where(and_(*filters)).group_by(User.status)
+
+    result = await db.execute(stmt)
+    status_counts = {row.status.value: row.count for row in result}
+
+    # Ensure all requested statuses are present with 0 count if missing
+    all_statuses = {status.value: status_counts.get(status.value, 0) for status in statuses}
+
+    # Add total count
+    all_statuses["total"] = sum(all_statuses.values())
+
+    return all_statuses
 
 
 async def create_user(db: AsyncSession, new_user: UserCreate, groups: list[Group], admin: Admin) -> User:
@@ -417,7 +512,7 @@ async def modify_user(db: AsyncSession, db_user: User, modify: UserModify) -> Us
     remove_usage_reminder = False
     remove_expiration_reminder = False
 
-    if modify.proxy_settings:
+    if modify.proxy_settings is not None:
         db_user.proxy_settings = modify.proxy_settings.dict()
     if modify.group_ids:
         db_user.groups = await get_groups_by_ids(db, modify.group_ids)
@@ -499,6 +594,24 @@ async def modify_user(db: AsyncSession, db_user: User, modify: UserModify) -> Us
     return db_user
 
 
+async def _reset_user_traffic_and_log(db: AsyncSession, db_user: User):
+    """Helper to reset user traffic and log the action."""
+    await db_user.awaitable_attrs.node_usages
+    await db_user.awaitable_attrs.next_plan
+    usage_log = UserUsageResetLogs(
+        user_id=db_user.id,
+        used_traffic_at_reset=db_user.used_traffic,
+    )
+    db.add(usage_log)
+
+    db_user.used_traffic = 0
+    db_user.node_usages.clear()
+
+    if db_user.next_plan:
+        await db.delete(db_user.next_plan)
+        db_user.next_plan = None
+
+
 async def reset_user_data_usage(db: AsyncSession, db_user: User) -> User:
     """
     Resets the data usage of a user and logs the reset.
@@ -510,26 +623,37 @@ async def reset_user_data_usage(db: AsyncSession, db_user: User) -> User:
     Returns:
         User: The updated user object.
     """
-    await db_user.awaitable_attrs.node_usages
-    usage_log = UserUsageResetLogs(
-        user_id=db_user.id,
-        used_traffic_at_reset=db_user.used_traffic,
-    )
-    db.add(usage_log)
+    await _reset_user_traffic_and_log(db, db_user)
 
-    db_user.used_traffic = 0
-    db_user.node_usages.clear()
     if db_user.status not in [UserStatus.expired, UserStatus.disabled]:
         db_user.status = UserStatus.active.value
-
-    if db_user.next_plan:
-        await db.delete(db_user.next_plan)
-        db_user.next_plan = None
 
     await db.commit()
     await db.refresh(db_user)
     await load_user_attrs(db_user)
     return db_user
+
+
+async def bulk_reset_user_data_usage(db: AsyncSession, users: list[User]) -> list[User]:
+    """
+    Resets the data usage for a list of users and logs the reset.
+
+    Args:
+        db (AsyncSession): Database session.
+        users (list[User]): The list of user objects whose data usage is to be reset.
+
+    Returns:
+        list[User]: The updated list of user objects.
+    """
+    for db_user in users:
+        await _reset_user_traffic_and_log(db, db_user)
+        if db_user.status not in [UserStatus.expired, UserStatus.disabled]:
+            db_user.status = UserStatus.active.value
+    await db.commit()
+    for user in users:
+        await db.refresh(user)
+        await load_user_attrs(user)
+    return users
 
 
 async def reset_user_by_next(db: AsyncSession, db_user: User) -> User:
@@ -543,19 +667,10 @@ async def reset_user_by_next(db: AsyncSession, db_user: User) -> User:
     Returns:
         User: The updated user object.
     """
-    await db_user.awaitable_attrs.node_usages
-    usage_log = UserUsageResetLogs(
-        user_id=db_user.id,
-        used_traffic_at_reset=db_user.used_traffic,
-    )
-    db.add(usage_log)
-
-    db_user.node_usages.clear()
-    db_user.status = UserStatus.active
-
+    remaining_traffic = (db_user.data_limit or 0) - db_user.used_traffic
     if db_user.next_plan.user_template_id is None:
         db_user.data_limit = db_user.next_plan.data_limit + (
-            0 if not db_user.next_plan.add_remaining_traffic else db_user.data_limit or 0 - db_user.used_traffic
+            0 if not db_user.next_plan.add_remaining_traffic else remaining_traffic
         )
         db_user.expire = (
             timedelta(seconds=db_user.next_plan.expire) + datetime.now(UTC) if db_user.next_plan.expire else None
@@ -565,7 +680,7 @@ async def reset_user_by_next(db: AsyncSession, db_user: User) -> User:
         await db_user.next_plan.user_template.awaitable_attrs.groups
         db_user.groups = db_user.next_plan.user_template.groups
         db_user.data_limit = db_user.next_plan.user_template.data_limit + (
-            0 if not db_user.next_plan.add_remaining_traffic else db_user.data_limit or 0 - db_user.used_traffic
+            0 if not db_user.next_plan.add_remaining_traffic else remaining_traffic
         )
         if db_user.next_plan.user_template.status is UserStatus.on_hold:
             db_user.status = UserStatus.on_hold
@@ -585,9 +700,8 @@ async def reset_user_by_next(db: AsyncSession, db_user: User) -> User:
         db_user.proxy_settings = proxy_settings
         db_user.data_limit_reset_strategy = db_user.next_plan.user_template.data_limit_reset_strategy
 
-    db_user.used_traffic = 0
-    await db.delete(db_user.next_plan)
-    db_user.next_plan = None
+    await _reset_user_traffic_and_log(db, db_user)
+    db_user.status = UserStatus.active
 
     await db.commit()
     await db.refresh(db_user)
@@ -606,35 +720,53 @@ async def revoke_user_sub(db: AsyncSession, db_user: User) -> User:
     Returns:
         User: The updated user object.
     """
-    db_user.sub_revoked_at = datetime.now(timezone.utc)
-
-    db_user.proxy_settings = ProxyTable().dict()
-
+    stmt = (
+        update(User)
+        .where(User.id == db_user.id)
+        .values(sub_revoked_at=datetime.now(timezone.utc), proxy_settings=ProxyTable().dict())
+    )
+    await db.execute(stmt)
     await db.commit()
     await db.refresh(db_user)
     await load_user_attrs(db_user)
     return db_user
 
 
-async def update_user_sub(db: AsyncSession, db_user: User, user_agent: str) -> User:
+async def user_sub_update(db: AsyncSession, user_id: User, user_agent: str) -> User:
     """
     Updates the user's subscription details.
 
     Args:
         db (AsyncSession): Database session.
-        dbuser (User): The user object whose subscription is to be updated.
-        user_agent (str): The user agent string to update.
+        user_id (User): The user id whose subscription is to be updated.
+        user_agent (str): The user agent string.
 
-    Returns:
-        User: The updated user object.
     """
-    db_user.sub_updated_at = datetime.now(timezone.utc)
-    db_user.sub_last_user_agent = user_agent
-
+    agent = UserSubscriptionUpdate(user_id=user_id, user_agent=user_agent)
+    db.add(agent)
     await db.commit()
-    await db.refresh(db_user)
-    await load_user_attrs(db_user)
-    return db_user
+
+
+async def get_user_sub_update_list(
+    db: AsyncSession, user_id: int, offset: int = 0, limit: int = 10
+) -> tuple[Sequence[UserSubscriptionUpdate], int]:
+    stmt = (
+        select(UserSubscriptionUpdate)
+        .where(UserSubscriptionUpdate.user_id == user_id)
+        .order_by(desc(UserSubscriptionUpdate.created_at))
+    )
+
+    result = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    count = result.scalar() or 0
+
+    if offset:
+        stmt = stmt.offset(offset)
+    if limit:
+        stmt = stmt.limit(limit)
+
+    result = (await db.execute(stmt)).unique().scalars().all()
+
+    return result, count
 
 
 async def autodelete_expired_users(db: AsyncSession, include_limited_users: bool = False) -> List[User]:
@@ -685,6 +817,7 @@ async def get_all_users_usages(
     end: datetime,
     period: Period = Period.hour,
     node_id: int | None = None,
+    group_by_node: bool = False,
 ) -> UserUsageStatsList:
     """
     Retrieves aggregated usage data for all users of an admin within a specified time range,
@@ -714,53 +847,38 @@ async def get_all_users_usages(
 
     if node_id is not None:
         conditions.append(NodeUserUsage.node_id == node_id)
+    else:
+        node_id = -1
 
-    stmt = (
-        select(trunc_expr.label("period_start"), func.sum(NodeUserUsage.used_traffic).label("total_traffic"))
-        .where(and_(*conditions))
-        .group_by(trunc_expr)
-        .order_by(trunc_expr)
-    )
+    if group_by_node:
+        stmt = (
+            select(
+                trunc_expr.label("period_start"),
+                func.coalesce(NodeUserUsage.node_id, 0).label("node_id"),
+                func.sum(NodeUserUsage.used_traffic).label("total_traffic"),
+            )
+            .where(and_(*conditions))
+            .group_by(trunc_expr, NodeUserUsage.node_id)
+            .order_by(trunc_expr)
+        )
+    else:
+        stmt = (
+            select(trunc_expr.label("period_start"), func.sum(NodeUserUsage.used_traffic).label("total_traffic"))
+            .where(and_(*conditions))
+            .group_by(trunc_expr)
+            .order_by(trunc_expr)
+        )
 
     result = await db.execute(stmt)
-    return UserUsageStatsList(
-        period=period, start=start, end=end, stats=[UserUsageStat(**row) for row in result.mappings()]
-    )
+    stats = {}
+    for row in result.mappings():
+        row_dict = dict(row)
+        node_id_val = row_dict.pop("node_id", node_id)
+        if node_id_val not in stats:
+            stats[node_id_val] = []
+        stats[node_id_val].append(UserUsageStat(**row_dict))
 
-
-async def _update_user_status(db_user: User, status: UserStatus) -> User:
-    """
-    Updates a user's status and records the time of change.
-
-    Args:
-        db_user (User): The user to update.
-        status (UserStatus): The new status.
-
-    Returns:
-        User: The updated user object.
-    """
-    db_user.status = status
-    db_user.last_status_change = datetime.now(timezone.utc)
-    return db_user
-
-
-async def update_user_status(db: AsyncSession, db_user: User, status: UserStatus) -> User:
-    """
-    Updates a user status and records the time of change.
-
-    Args:
-        db (AsyncSession): Database session.
-        db_user (User): The user to update.
-        status (UserStatus): The new status.
-
-    Returns:
-        User: The updated user object.
-    """
-    db_user = await _update_user_status(db_user, status)
-    await db.commit()
-    await db.refresh(db_user)
-    await load_user_attrs(db_user)
-    return db_user
+    return UserUsageStatsList(period=period, start=start, end=end, stats=stats)
 
 
 async def update_users_status(db: AsyncSession, users: list[User], status: UserStatus) -> list[User]:
@@ -775,9 +893,13 @@ async def update_users_status(db: AsyncSession, users: list[User], status: UserS
     Returns:
         User: The updated user object.
     """
-    updated_users = await asyncio.gather(*[_update_user_status(user, status) for user in users])
+    user_ids = [user.id for user in users]
+    stmt = (
+        update(User).where(User.id.in_(user_ids)).values(status=status, last_status_change=datetime.now(timezone.utc))
+    )
+    await db.execute(stmt)
     await db.commit()
-    for user in updated_users:
+    for user in users:
         await db.refresh(user)
         await load_user_attrs(user)
     return users
@@ -789,51 +911,14 @@ async def set_owner(db: AsyncSession, db_user: User, admin: Admin) -> User:
 
     Args:
         db (AsyncSession): Database session.
-        dbuser (User): The user object whose owner is to be set.
+        db_user (User): The user object whose owner is to be set.
         admin (Admin): The admin to set as owner.
 
     Returns:
         User: The updated user object.
     """
-    db_user.admin = admin
-    await db.commit()
-    await db.refresh(db_user)
-    await load_user_attrs(db_user)
-    return db_user
-
-
-async def _start_user_expire(db_user: User) -> User:
-    """
-    Starts the expiration timer for a user.
-
-    Args:
-        db (AsyncSession): Database session.
-        dbuser (User): The user object whose expiration timer is to be started.
-
-    Returns:
-        User: The updated user object.
-    """
-    db_user.expire = datetime.now(timezone.utc) + timedelta(seconds=db_user.on_hold_expire_duration)
-    db_user.on_hold_expire_duration = None
-    db_user.on_hold_timeout = None
-    db_user.status = UserStatus.active
-
-    return db_user
-
-
-async def start_user_expire(db: AsyncSession, db_user: User) -> User:
-    """
-    Starts the expiration timer for a user.
-
-    Args:
-        db (AsyncSession): Database session.
-        db_user (User): The user object whose expiration timer is to be started.
-
-    Returns:
-        User: The updated user object.
-    """
-    db_user = await _start_user_expire(db_user)
-
+    stmt = update(User).where(User.id == db_user.id).values(admin_id=admin.id)
+    await db.execute(stmt)
     await db.commit()
     await db.refresh(db_user)
     await load_user_attrs(db_user)
@@ -851,10 +936,18 @@ async def start_users_expire(db: AsyncSession, users: list[User]) -> list[User]:
     Returns:
         list[User]: The updated users list.
     """
-    updated_users = await asyncio.gather(*[_start_user_expire(user) for user in users])
+    now = datetime.now(timezone.utc)
+    for user in users:
+        expire_time = now + timedelta(seconds=user.on_hold_expire_duration)
+        stmt = (
+            update(User)
+            .where(User.id == user.id)
+            .values(expire=expire_time, on_hold_expire_duration=None, on_hold_timeout=None, status=UserStatus.active)
+        )
+        await db.execute(stmt)
 
     await db.commit()
-    for user in updated_users:
+    for user in users:
         await db.refresh(user)
         await load_user_attrs(user)
     return users
@@ -868,7 +961,7 @@ async def create_notification_reminder(
 
     Args:
         db (AsyncSession): The database session.
-        reminder_type (app.db.models.ReminderType): The type of reminder.
+        reminder_type (ReminderType): The type of reminder.
         expires_at (datetime): The expiration time of the reminder.
         user_id (int): The ID of the user associated with the reminder.
         threshold (Optional[int]): The threshold value to check for (e.g., days left or usage percent).
@@ -883,67 +976,6 @@ async def create_notification_reminder(
     await db.commit()
     await db.refresh(reminder)
     return reminder
-
-
-async def get_notification_reminder(
-    db: AsyncSession, user_id: int, reminder_type: ReminderType, threshold: Optional[int] = None
-) -> Union[NotificationReminder, None]:
-    """
-    Retrieves a notification reminder for a user.
-
-    Args:
-        db (AsyncSession): The database session.
-        user_id (int): The ID of the user.
-        reminder_type (app.db.models.ReminderType): The type of reminder to retrieve.
-        threshold (Optional[int]): The threshold value to check for (e.g., days left or usage percent).
-
-    Returns:
-        Union[NotificationReminder, None]: The NotificationReminder object if found and not expired, None otherwise.
-    """
-    query = select(NotificationReminder).where(
-        NotificationReminder.user_id == user_id, NotificationReminder.type == reminder_type
-    )
-
-    # If a threshold is provided, filter for reminders with this threshold
-    if threshold is not None:
-        query = query.where(NotificationReminder.threshold == threshold)
-
-    reminder = (await db.execute(query)).scalar_one_or_none()
-
-    if reminder is None:
-        return None
-
-    # Check if the reminder has expired
-    if reminder.expires_at and reminder.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        await db.delete(reminder)
-        await db.commit()
-        return None
-
-    return reminder
-
-
-async def delete_notification_reminder_by_type(
-    db: AsyncSession, user_id: int, reminder_type: ReminderType, threshold: Optional[int] = None
-) -> None:
-    """
-    Deletes a notification reminder for a user based on the reminder type and optional threshold.
-
-    Args:
-        db (AsyncSession): The database session.
-        user_id (int): The ID of the user.
-        reminder_type (app.db.models.ReminderType): The type of reminder to delete.
-        threshold (Optional[int]): The threshold to delete (e.g., days left or usage percent). If not provided, deletes all reminders of that type.
-    """
-    stmt = delete(NotificationReminder).where(
-        NotificationReminder.user_id == user_id, NotificationReminder.type == reminder_type
-    )
-
-    # If a threshold is provided, include it in the filter
-    if threshold is not None:
-        stmt = stmt.where(NotificationReminder.threshold == threshold)
-
-    await db.execute(stmt)
-    await db.commit()
 
 
 async def delete_user_passed_notification_reminders(
@@ -967,35 +999,22 @@ async def delete_user_passed_notification_reminders(
 
     stmt = delete(NotificationReminder).where(and_(*conditions))
     await db.execute(stmt)
-    await db.commit()
 
 
-async def delete_notification_reminder(db: AsyncSession, db_reminder: NotificationReminder) -> None:
-    """
-    Deletes a specific notification reminder.
-
-    Args:
-        db (AsyncSession): The database session.
-        db_reminder (NotificationReminder): The NotificationReminder object to delete.
-    """
-    await db.delete(db_reminder)
-    await db.commit()
-
-
-async def count_online_users(db: AsyncSession, time_delta: timedelta, admin: Admin | None = None):
+async def count_online_users(db: AsyncSession, time_delta: timedelta, admin_id: int | None = None):
     """
     Counts the number of users who have been online within the specified time delta.
 
     Args:
         db (AsyncSession): The database session.
         time_delta (timedelta): The time period to check for online users.
-        admin (Admin, optional): Filter by admin.
+        admin_id (int, optional): Filter by admin.
 
     Returns:
         int: The number of users who have been online within the specified time period.
     """
     twenty_four_hours_ago = datetime.now(timezone.utc) - time_delta
     query = select(func.count(User.id)).where(User.online_at.isnot(None), User.online_at >= twenty_four_hours_ago)
-    if admin and not admin.is_sudo:
-        query = query.where(User.admin_id == admin.id)
+    if admin_id:
+        query = query.where(User.admin_id == admin_id)
     return (await db.execute(query)).scalar_one_or_none()

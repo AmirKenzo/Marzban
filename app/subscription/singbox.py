@@ -35,13 +35,22 @@ class SingBoxConfiguration(BaseSubscription):
             self.config["outbounds"].reverse()
         return json.dumps(self.config, indent=4, cls=UUIDEncoder)
 
-    def tls_config(self, sni=None, fp=None, tls=None, pbk=None, sid=None, alpn=None, ais=None):
+    def tls_config(
+        self, sni=None, fp=None, tls=None, pbk=None, sid=None, alpn=None, ais=None, fragment=None, ech_config_list=None
+    ):
         config = {
             "enabled": tls in ("tls", "reality"),
             "server_name": sni,
             "insecure": ais,
             "utls": {"enabled": bool(fp), "fingerprint": fp} if fp else None,
             "alpn": ([alpn] if not isinstance(alpn, list) else alpn) if alpn else None,
+            "ech": {
+                "enabled": True,
+                "config": [],
+                "config_path": "",
+            }
+            if ech_config_list
+            else None,
             "reality": {
                 "enabled": tls == "reality",
                 "public_key": pbk,
@@ -50,6 +59,9 @@ class SingBoxConfiguration(BaseSubscription):
             if tls == "reality"
             else None,
         }
+        if fragment and (singbox_fragment := fragment.get("sing_box")):
+            config.update(singbox_fragment)
+
         return self._remove_none_values(config)
 
     def http_config(
@@ -199,6 +211,8 @@ class SingBoxConfiguration(BaseSubscription):
         request: dict | None = None,
         random_user_agent: bool = False,
         permit_without_stream: bool = False,
+        fragment: dict | None = None,
+        ech_config_list: str | None = None,
     ):
         if isinstance(port, str):
             ports = port.split(",")
@@ -250,7 +264,9 @@ class SingBoxConfiguration(BaseSubscription):
             )
 
         if tls in ("tls", "reality"):
-            config["tls"] = self.tls_config(sni=sni, fp=fp, tls=tls, pbk=pbk, sid=sid, alpn=alpn, ais=ais)
+            config["tls"] = self.tls_config(
+                sni=sni, fragment=fragment, fp=fp, tls=tls, pbk=pbk, sid=sid, alpn=alpn, ais=ais
+            )
 
         if mux_settings and (singbox_mux := mux_settings.get("sing_box")):
             singbox_mux = self._remove_none_values(singbox_mux)
@@ -298,6 +314,8 @@ class SingBoxConfiguration(BaseSubscription):
             http_headers=inbound.get("http_headers"),
             request=inbound.get("request"),
             mux_settings=inbound.get("mux_settings", {}),
+            fragment=inbound.get("fragment_settings", {}),
+            ech_config_list=inbound.get("ech_config_list"),
         )
 
         if inbound["protocol"] == "vmess":

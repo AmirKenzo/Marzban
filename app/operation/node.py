@@ -192,7 +192,7 @@ class NodeOperation(BaseOperation):
         asyncio.create_task(self.connect_node(node_id))
         logger.info(f'Node "{node_id}" restarted by admin "{admin.username}"')
 
-    async def restart_all_node(self, db: AsyncSession, core_id: int | None, admin: AdminDetails) -> None:
+    async def restart_all_node(self, db: AsyncSession, admin: AdminDetails, core_id: int | None = None) -> None:
         nodes: list[Node] = await self.get_db_nodes(db, core_id)
         await asyncio.gather(*[NodeOperation.connect_node(node.id) for node in nodes])
 
@@ -205,9 +205,10 @@ class NodeOperation(BaseOperation):
         end: dt = None,
         period: Period = Period.hour,
         node_id: int | None = None,
+        group_by_node: bool = False,
     ) -> NodeUsageStatsList:
         start, end = await self.validate_dates(start, end)
-        return await get_nodes_usage(db, start, end, period=period, node_id=node_id)
+        return await get_nodes_usage(db, start, end, period=period, node_id=node_id, group_by_node=group_by_node)
 
     async def get_logs(self, node_id: Node) -> asyncio.Queue:
         node = await node_manager.get_node(node_id)

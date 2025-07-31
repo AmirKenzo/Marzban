@@ -9,7 +9,7 @@ from app.db.models import Admin
 from app.models.group import BulkGroup, Group, GroupCreate, GroupModify, GroupResponse, GroupsResponse
 from app.models.user import UserResponse
 from app.node import node_manager
-from app.operation import BaseOperation
+from app.operation import BaseOperation, OperatorType
 from app.utils.logger import get_logger
 
 logger = get_logger("group-operation")
@@ -32,7 +32,7 @@ class GroupOperation(BaseOperation):
         self, db: AsyncSession, offset: int | None = None, limit: int | None = None
     ) -> GroupsResponse:
         db_groups, count = await get_group(db, offset, limit)
-        return GroupsResponse.model_validate({"groups": db_groups, "total": count})
+        return GroupsResponse(groups=db_groups, total=count)
 
     async def modify_group(self, db: AsyncSession, group_id: int, modified_group: GroupModify, admin: Admin) -> Group:
         db_group = await self.get_validated_group(db, group_id)
@@ -72,17 +72,23 @@ class GroupOperation(BaseOperation):
     async def bulk_add_groups(self, db: AsyncSession, bulk_model: BulkGroup):
         await self.validate_all_groups(db, bulk_model)
 
-        users = await add_groups_to_users(db, bulk_model)
+        users, users_count = await add_groups_to_users(db, bulk_model)
 
         await asyncio.gather(
             *[node_manager.update_user(UserResponse.model_validate(user), await user.inbounds()) for user in users]
         )
+        if self.operator_type in (OperatorType.API, OperatorType.WEB):
+            return {"detail": f"operation has been successfuly done on {users_count} users"}
+        return users_count
 
     async def bulk_remove_groups(self, db: AsyncSession, bulk_model: BulkGroup):
         await self.validate_all_groups(db, bulk_model)
 
-        users = await remove_groups_from_users(db, bulk_model)
+        users, users_count = await remove_groups_from_users(db, bulk_model)
 
         await asyncio.gather(
             *[node_manager.update_user(UserResponse.model_validate(user), await user.inbounds()) for user in users]
         )
+        if self.operator_type in (OperatorType.API, OperatorType.WEB):
+            return {"detail": f"operation has been successfuly done on {users_count} users"}
+        return users_count

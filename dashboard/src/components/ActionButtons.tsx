@@ -10,13 +10,15 @@ import {
     PieChart,
     Trash2,
     EllipsisVertical,
-    ListStart
+    ListStart,
+    Users
 } from 'lucide-react'
 import { FC, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CopyButton } from './CopyButton'
 import QRCodeModal from './dialogs/QRCodeModal'
 import UserModal from './dialogs/UserModal'
+import { UserSubscriptionClientsModal } from './dialogs/UserSubscriptionClientsModal'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -66,6 +68,8 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
     const [isRevokeSubDialogOpen, setRevokeSubDialogOpen] = useState(false)
     const [isUsageModalOpen, setUsageModalOpen] = useState(false)
     const [isSetOwnerModalOpen, setSetOwnerModalOpen] = useState(false)
+    const [isActiveNextPlanModalOpen, setIsActiveNextPlanModalOpen] = useState(false)
+    const [isSubscriptionClientsModalOpen, setSubscriptionClientsModalOpen] = useState(false)
     const queryClient = useQueryClient()
     const { t } = useTranslation()
     const dir = useDirDetection()
@@ -194,6 +198,11 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
         }
     }
 
+    const handleActiveNextPlan = () => {
+        setIsActiveNextPlanModalOpen(true)
+    }
+
+
     const activeNextPlan = async () => {
         try {
             await activeNextMutation.mutateAsync({ username: user.username })
@@ -238,34 +247,112 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
         }
     }
 
-    const handleCopyOrDownload = async (subLink: SubscribeLink) => {
-        if (subLink.protocol === 'links' || subLink.protocol === 'links (base64)') {
-            // For links protocols, fetch content and copy to clipboard
-            try {
-                const response = await fetch(subLink.link)
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`)
+    // Utility functions
+    const isIOS = () => {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    }
+
+    const copyToClipboardIOS = async (content: string): Promise<boolean> => {
+        try {
+            // Try modern clipboard API first
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(content)
+                return true
+            }
+
+            // Fallback: create temporary textarea
+            const textArea = document.createElement('textarea')
+            textArea.value = content
+            textArea.style.position = 'fixed'
+            textArea.style.left = '-999999px'
+            textArea.style.top = '-999999px'
+            document.body.appendChild(textArea)
+            textArea.focus()
+            textArea.select()
+
+            const success = document.execCommand('copy')
+            document.body.removeChild(textArea)
+            return success
+        } catch (error) {
+            console.error('iOS clipboard copy failed:', error)
+            return false
+        }
+    }
+
+    const showManualCopyAlert = (content: string, type: 'content' | 'url') => {
+        const message = type === 'content'
+            ? t('copyFailed', { defaultValue: 'Failed to copy automatically. Please copy manually:' })
+            : t('downloadFailed', { defaultValue: 'Download blocked. Please copy manually:' })
+        alert(`${message}\n\n${content}`)
+    }
+
+    const fetchContent = async (url: string): Promise<string> => {
+        const response = await fetch(url)
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        return response.text()
+    }
+
+    const handleLinksCopy = async (subLink: SubscribeLink) => {
+        try {
+            const content = await fetchContent(subLink.link)
+
+            if (isIOS()) {
+                const success = await copyToClipboardIOS(content)
+                if (success) {
+                    toast.success(t('usersTable.copied', { defaultValue: 'Copied to clipboard' }))
+                } else {
+                    showManualCopyAlert(content, 'content')
                 }
-                const content = await response.text()
+            } else {
                 await copy(content)
                 toast.success(t('usersTable.copied', { defaultValue: 'Copied to clipboard' }))
-            } catch (error) {
-                console.error('Failed to fetch and copy content:', error)
-                // Fallback: copy the URL instead
-                try {
-                    await copy(subLink.link)
-                    toast.success(t('usersTable.copied', { defaultValue: 'URL copied to clipboard' }))
-                } catch (copyError) {
-                    toast.error(t('copyFailed', { defaultValue: 'Failed to copy content' }))
-                }
             }
-        } else {
-            // For other protocols, trigger download
-            try {
+        } catch (error) {
+            console.error('Failed to fetch and copy content:', error)
+            // Fallback: copy the URL instead
+            await handleUrlCopy(subLink.link)
+        }
+    }
+
+    const handleUrlCopy = async (url: string) => {
+        try {
+            if (isIOS()) {
+                const success = await copyToClipboardIOS(url)
+                if (success) {
+                    toast.success(t('usersTable.copied', { defaultValue: 'URL copied to clipboard' }))
+                } else {
+                    showManualCopyAlert(url, 'url')
+                }
+            } else {
+                await copy(url)
+                toast.success(t('usersTable.copied', { defaultValue: 'URL copied to clipboard' }))
+            }
+        } catch (error) {
+            toast.error(t('copyFailed', { defaultValue: 'Failed to copy content' }))
+        }
+    }
+
+    const handleConfigDownload = async (subLink: SubscribeLink) => {
+        try {
+            if (isIOS()) {
+                // iOS: open in new tab or show content
+                const newWindow = window.open(subLink.link, '_blank')
+                if (!newWindow) {
+                    const content = await fetchContent(subLink.link)
+                    showManualCopyAlert(content, 'url')
+                } else {
+                    toast.success(t('downloadSuccess', { defaultValue: 'Configuration opened in new tab' }))
+                }
+            } else {
+                // Non-iOS: regular download
                 const response = await fetch(subLink.link)
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`)
                 }
+
                 const blob = await response.blob()
                 const url = window.URL.createObjectURL(blob)
                 const a = document.createElement('a')
@@ -276,10 +363,20 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
                 window.URL.revokeObjectURL(url)
                 document.body.removeChild(a)
                 toast.success(t('downloadSuccess', { defaultValue: 'Configuration downloaded successfully' }))
-            } catch (error) {
-                console.error('Failed to download configuration:', error)
-                toast.error(t('downloadFailed', { defaultValue: 'Failed to download configuration' }))
             }
+        } catch (error) {
+            console.error('Failed to download configuration:', error)
+            toast.error(t('downloadFailed', { defaultValue: 'Failed to download configuration' }))
+        }
+    }
+
+    const handleCopyOrDownload = async (subLink: SubscribeLink) => {
+        const isLinksProtocol = subLink.protocol === 'links' || subLink.protocol === 'links (base64)'
+
+        if (isLinksProtocol) {
+            await handleLinksCopy(subLink)
+        } else {
+            await handleConfigDownload(subLink)
         }
     }
 
@@ -309,6 +406,7 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
                                 {subscribeLinks.map(subLink => (
                                     <DropdownMenuItem className="p-0 justify-start" key={subLink.link}>
                                         <Button
+                                            dir='ltr'
                                             variant="ghost"
                                             className="w-full h-full px-2 justify-start"
                                             aria-label={subLink.protocol.includes('links') ? 'Copy' : 'Download'}
@@ -375,11 +473,17 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
 
                         {/* Active Next Plan */}
                         {user.next_plan && (
-                            <DropdownMenuItem onClick={activeNextPlan}>
-                                <ListStart className="w-4 h-4 mr-2" />
-                                <span>{t('userDialog.activeNextPlan')}</span>
+                            <DropdownMenuItem onClick={handleActiveNextPlan}>
+                                <ListStart className="w-4 h-4 mr-2"/>
+                                <span>{t('usersTable.activeNextPlanSubmit')}</span>
                             </DropdownMenuItem>
                         )}
+
+                        {/* Subscription Info */}
+                        <DropdownMenuItem onClick={() => setSubscriptionClientsModalOpen(true)}>
+                            <Users className="h-4 w-4 mr-2" />
+                            <span>{t('subscriptionClients.viewAllClients', { defaultValue: 'View All Clients' })}</span>
+                        </DropdownMenuItem>
 
                         <DropdownMenuSeparator />
 
@@ -393,19 +497,34 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
             </div>
 
             {/* QR Code Modal */}
-            {showQRModal && subscribeUrl && <QRCodeModal subscribeLinks={subscribeLinks} subscribeUrl={subscribeUrl}
+            {showQRModal && subscribeUrl && <QRCodeModal subscribeUrl={subscribeUrl}
                 onCloseModal={onCloseQRModal} />}
+
+            {/* Active Next Plan Confirm Dialog */}
+            <AlertDialog open={isActiveNextPlanModalOpen} onOpenChange={setIsActiveNextPlanModalOpen}>
+                <AlertDialogContent dir={dir}>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>{t('usersTable.activeNextPlanTitle')}</AlertDialogTitle>
+                        <AlertDialogDescription>{t('usersTable.activeNextPlanPrompt', { name: user.username })}</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 sm:gap-0')}>
+                        <AlertDialogCancel
+                            onClick={() => setDeleteDialogOpen(false)}>{t('usersTable.cancel')}</AlertDialogCancel>
+                        <AlertDialogAction onClick={activeNextPlan} disabled={activeNextMutation.isPending}>
+                            {t('usersTable.activeNextPlanSubmit')}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* Delete User Confirm Dialog */}
             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                 <AlertDialogContent dir={dir}>
                     <AlertDialogHeader>
-                        <AlertDialogTitle
-                            className={cn(dir === 'rtl' && 'text-right')}>{t('usersTable.deleteUserTitle')}</AlertDialogTitle>
-                        <AlertDialogDescription
-                            className={cn(dir === 'rtl' && 'text-right')}>{t('usersTable.deleteUserPrompt', { name: user.username })}</AlertDialogDescription>
+                        <AlertDialogTitle>{t('usersTable.deleteUserTitle')}</AlertDialogTitle>
+                        <AlertDialogDescription>{t('usersTable.deleteUserPrompt', { name: user.username })}</AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="flex items-center gap-2">
+                    <AlertDialogFooter className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 sm:gap-0')}>
                         <AlertDialogCancel
                             onClick={() => setDeleteDialogOpen(false)}>{t('usersTable.cancel')}</AlertDialogCancel>
                         <AlertDialogAction variant="destructive" onClick={confirmDelete}
@@ -420,12 +539,10 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
             <AlertDialog open={isResetUsageDialogOpen} onOpenChange={setResetUsageDialogOpen}>
                 <AlertDialogContent dir={dir}>
                     <AlertDialogHeader>
-                        <AlertDialogTitle
-                            className={cn(dir === 'rtl' && 'text-right')}>{t('usersTable.resetUsageTitle')}</AlertDialogTitle>
-                        <AlertDialogDescription
-                            className={cn(dir === 'rtl' && 'text-right')}>{t('usersTable.resetUsagePrompt', { name: user.username })}</AlertDialogDescription>
+                        <AlertDialogTitle>{t('usersTable.resetUsageTitle')}</AlertDialogTitle>
+                        <AlertDialogDescription>{t('usersTable.resetUsagePrompt', { name: user.username })}</AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="flex items-center gap-2">
+                    <AlertDialogFooter className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 sm:gap-0')}>
                         <AlertDialogCancel
                             onClick={() => setResetUsageDialogOpen(false)}>{t('usersTable.cancel')}</AlertDialogCancel>
                         <AlertDialogAction onClick={confirmResetUsage} disabled={resetUserDataUsageMutation.isPending}>
@@ -439,12 +556,10 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
             <AlertDialog open={isRevokeSubDialogOpen} onOpenChange={setRevokeSubDialogOpen}>
                 <AlertDialogContent dir={dir}>
                     <AlertDialogHeader>
-                        <AlertDialogTitle
-                            className={cn(dir === 'rtl' && 'text-right')}>{t('revokeUserSub.title')}</AlertDialogTitle>
-                        <AlertDialogDescription
-                            className={cn(dir === 'rtl' && 'text-right')}>{t('revokeUserSub.prompt', { username: user.username })}</AlertDialogDescription>
+                        <AlertDialogTitle>{t('revokeUserSub.title')}</AlertDialogTitle>
+                        <AlertDialogDescription>{t('revokeUserSub.prompt', { username: user.username })}</AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="flex items-center gap-2">
+                    <AlertDialogFooter className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 sm:gap-0')}>
                         <AlertDialogCancel
                             onClick={() => setRevokeSubDialogOpen(false)}>{t('usersTable.cancel')}</AlertDialogCancel>
                         <AlertDialogAction onClick={confirmRevokeSubscription}
@@ -471,6 +586,13 @@ const ActionButtons: FC<ActionButtonsProps> = ({ user }) => {
                     onSuccess={refreshUserData}
                 />
             )}
+
+            {/* UserSubscriptionClientsModal */}
+            <UserSubscriptionClientsModal 
+                isOpen={isSubscriptionClientsModalOpen} 
+                onOpenChange={setSubscriptionClientsModalOpen} 
+                username={user.username} 
+            />
         </div>
     )
 }

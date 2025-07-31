@@ -1,13 +1,16 @@
 import base64
 import json
 import urllib.parse as urlparse
+from enum import Enum
 from random import choice
 from typing import Union
 from urllib.parse import quote
 from uuid import UUID
-from . import BaseSubscription
-from app.subscription.funcs import get_grpc_gun, get_grpc_multi, detect_shadowsocks_2022
+
+from app.subscription.funcs import detect_shadowsocks_2022, get_grpc_gun, get_grpc_multi
 from config import EXTERNAL_CONFIG
+
+from . import BaseSubscription
 
 
 class StandardLinks(BaseSubscription):
@@ -23,7 +26,7 @@ class StandardLinks(BaseSubscription):
             self.links.append(EXTERNAL_CONFIG)
         if reverse:
             self.links.reverse()
-        return self.links
+        return "\n".join((self.links))
 
     def add(self, remark: str, address: str, inbound: dict, settings: dict):
         net = inbound["network"]
@@ -69,6 +72,7 @@ class StandardLinks(BaseSubscription):
             xmux=inbound.get("xmux"),
             downloadSettings=inbound.get("downloadSettings"),
             http_headers=inbound.get("http_headers"),
+            ech_config_list=inbound.get("ech_config_list"),
         )
         if inbound["protocol"] == "vmess":
             link = self.vmess(
@@ -148,6 +152,7 @@ class StandardLinks(BaseSubscription):
         elif net in ("splithttp", "xhttp"):
             payload["path"] = path
             payload["host"] = host
+            mode = mode.value if isinstance(mode, Enum) else mode
             if protocol == "vmess":
                 payload["type"] = mode
             else:
@@ -192,19 +197,42 @@ class StandardLinks(BaseSubscription):
             payload["host"] = host
 
     def _make_tls_settings(
-        self, payload: dict, tls: str, sni: str, fp: str, alpn: str, pbk: str, sid: str, spx: str, fs: str
+        self,
+        payload: dict,
+        tls: str,
+        sni: str,
+        fp: str,
+        alpn: str,
+        pbk: str,
+        sid: str,
+        spx: str,
+        fs: str,
+        ais: bool,
+        ech_config_list: str,
     ):
         payload["sni"] = sni
         payload["fp"] = fp
         if alpn:
             payload["alpn"] = alpn
         if fs:
-            payload["fragment"] = fs
+            xray_fragment = fs["xray"]
+            payload["fragment"] = (
+                f"{xray_fragment['length']},{xray_fragment['interval']},{xray_fragment['packets']}"
+                if xray_fragment
+                else ""
+            )
+
+        if ech_config_list:
+            payload["echConfigList"] = ech_config_list
+
         if tls == "reality":
             payload["pbk"] = pbk
             payload["sid"] = sid
             if spx:
                 payload["spx"] = spx
+
+        if ais:
+            payload["allowInsecure"] = 1
 
     def vmess(
         self,
@@ -238,6 +266,7 @@ class StandardLinks(BaseSubscription):
         downloadSettings: dict | None = None,
         random_user_agent: bool = False,
         http_headers: dict | None = None,
+        ech_config_list: str | None = None,
     ):
         payload = {
             "add": address,
@@ -274,7 +303,7 @@ class StandardLinks(BaseSubscription):
             downloadSettings=downloadSettings,
         )
         if tls in ("tls", "reality"):
-            self._make_tls_settings(payload, tls, sni, fp, alpn, pbk, sid, spx, fs)
+            self._make_tls_settings(payload, tls, sni, fp, alpn, pbk, sid, spx, fs, ais, ech_config_list)
         return "vmess://" + base64.b64encode(json.dumps(payload, sort_keys=True).encode("utf-8")).decode()
 
     def vless(
@@ -310,6 +339,7 @@ class StandardLinks(BaseSubscription):
         xmux: dict | None = None,
         random_user_agent: bool = False,
         downloadSettings: dict | None = None,
+        ech_config_list: str | None = None,
     ):
         payload = {"security": tls, "type": net, "headerType": type}
         if flow and (tls in ("tls", "reality") and net in ("tcp", "raw", "kcp") and type != "http"):
@@ -336,7 +366,7 @@ class StandardLinks(BaseSubscription):
             downloadSettings=downloadSettings,
         )
         if tls in ("tls", "reality"):
-            self._make_tls_settings(payload, tls, sni, fp, alpn, pbk, sid, spx, fs)
+            self._make_tls_settings(payload, tls, sni, fp, alpn, pbk, sid, spx, fs, ais, ech_config_list)
         return "vless://" + f"{id}@{address}:{port}?" + urlparse.urlencode(payload) + f"#{(urlparse.quote(remark))}"
 
     def trojan(
@@ -372,6 +402,7 @@ class StandardLinks(BaseSubscription):
         xmux: dict | None = None,
         random_user_agent: bool = False,
         downloadSettings: dict | None = None,
+        ech_config_list: str | None = None,
     ):
         payload = {"security": tls, "type": net, "headerType": type}
         if flow and (tls in ("tls", "reality") and net in ("tcp", "raw", "kcp") and type != "http"):
@@ -398,7 +429,7 @@ class StandardLinks(BaseSubscription):
             downloadSettings=downloadSettings,
         )
         if tls in ("tls", "reality"):
-            self._make_tls_settings(payload, tls, sni, fp, alpn, pbk, sid, spx, fs)
+            self._make_tls_settings(payload, tls, sni, fp, alpn, pbk, sid, spx, fs, ais, ech_config_list)
         return (
             "trojan://"
             + f"{urlparse.quote(password, safe=':')}@{address}:{port}?"

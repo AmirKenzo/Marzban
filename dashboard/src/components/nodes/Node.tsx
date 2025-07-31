@@ -25,13 +25,13 @@ const DeleteAlertDialog = ({ node, isOpen, onClose, onConfirm }: { node: NodeRes
   return (
     <AlertDialog open={isOpen} onOpenChange={onClose}>
       <AlertDialogContent>
-        <AlertDialogHeader className={cn(dir === 'rtl' && 'sm:text-right')}>
+        <AlertDialogHeader>
           <AlertDialogTitle>{t('nodes.deleteNode')}</AlertDialogTitle>
           <AlertDialogDescription>
             <span dir={dir} dangerouslySetInnerHTML={{ __html: t('deleteNode.prompt', { name: node.name }) }} />
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter className={cn(dir === 'rtl' && 'sm:gap-x-2 sm:flex-row-reverse')}>
+        <AlertDialogFooter>
           <AlertDialogCancel onClick={onClose}>{t('cancel')}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={onConfirm}>
             {t('delete')}
@@ -125,7 +125,7 @@ export default function Node({ node, onEdit, onToggleStatus }: NodeProps) {
                 }}
               >
                 <Power className="h-4 w-4 mr-2" />
-                {node.status !== 'disabled' ? t('disable') : t('enable')}
+                {node.status === 'disabled' ? t('enable') : t('disable')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

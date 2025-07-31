@@ -7,6 +7,8 @@ from app.db.models import UserStatus
 from app.models.admin import AdminDetails
 from app.models.stats import Period, UserUsageStatsList
 from app.models.user import (
+    BulkUser,
+    BulkUsersProxy,
     CreateUserFromTemplate,
     ModifyUserByTemplate,
     RemoveUsersResponse,
@@ -14,7 +16,7 @@ from app.models.user import (
     UserModify,
     UserResponse,
     UsersResponse,
-    BulkUser,
+    UserSubscriptionUpdateList,
 )
 from app.operation import OperatorType
 from app.operation.node import NodeOperation
@@ -117,7 +119,7 @@ async def revoke_user_subscription(
 async def reset_users_data_usage(db: AsyncSession = Depends(get_db), admin: AdminDetails = Depends(check_sudo_admin)):
     """Reset all users data usage"""
     await user_operator.reset_users_data_usage(db, admin)
-    await node_operator.restart_all_node(admin)
+    await node_operator.restart_all_node(db, admin)
     return {}
 
 
@@ -146,6 +148,22 @@ async def active_next_plan(
 async def get_user(username: str, db: AsyncSession = Depends(get_db), admin: AdminDetails = Depends(get_current)):
     """Get user information"""
     return await user_operator.get_user(db=db, username=username, admin=admin)
+
+
+@router.get(
+    "/{username}/sub_update",
+    response_model=UserSubscriptionUpdateList,
+    responses={403: responses._403, 404: responses._404},
+)
+async def get_user_sub_update_list(
+    username: str,
+    offset: int = 0,
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminDetails = Depends(get_current),
+):
+    """Get user subscription agent list"""
+    return await user_operator.get_user_sub_update_list(db, username=username, admin=admin, offset=offset, limit=limit)
 
 
 @router.get(
@@ -189,6 +207,7 @@ async def get_user_usage(
     username: str,
     period: Period,
     node_id: int | None = None,
+    group_by_node: bool = False,
     start: dt | None = Query(None, example="2024-01-01T00:00:00+03:30"),
     end: dt | None = Query(None, example="2024-01-31T23:59:59+03:30"),
     db: AsyncSession = Depends(get_db),
@@ -196,7 +215,14 @@ async def get_user_usage(
 ):
     """Get users usage"""
     return await user_operator.get_user_usage(
-        db, username=username, admin=admin, start=start, end=end, period=period, node_id=node_id
+        db,
+        username=username,
+        admin=admin,
+        start=start,
+        end=end,
+        period=period,
+        node_id=node_id,
+        group_by_node=group_by_node,
     )
 
 
@@ -204,6 +230,7 @@ async def get_user_usage(
 async def get_users_usage(
     period: Period,
     node_id: int | None = None,
+    group_by_node: bool = False,
     start: dt | None = Query(None, example="2024-01-01T00:00:00+03:30"),
     end: dt | None = Query(None, example="2024-01-31T23:59:59+03:30"),
     db: AsyncSession = Depends(get_db),
@@ -212,14 +239,22 @@ async def get_users_usage(
 ):
     """Get all users usage"""
     return await user_operator.get_users_usage(
-        db, admin=admin, start=start, end=end, owner=owner, period=period, node_id=node_id
+        db,
+        admin=admin,
+        start=start,
+        end=end,
+        owner=owner,
+        period=period,
+        node_id=node_id,
+        group_by_node=group_by_node,
     )
 
 
 @router.get("s/expired", response_model=list[str])
 async def get_expired_users(
     db: AsyncSession = Depends(get_db),
-    admin: AdminDetails = Depends(get_current),
+    _: AdminDetails = Depends(check_sudo_admin),
+    admin_username: str | None = None,
     expired_after: dt | None = Query(None, example="2024-01-01T00:00:00+03:30"),
     expired_before: dt | None = Query(None, example="2024-01-31T23:59:59+03:30"),
 ):
@@ -232,13 +267,14 @@ async def get_expired_users(
     - If both are omitted, returns all expired users
     """
 
-    return await user_operator.get_expired_users(db, admin, expired_after, expired_before)
+    return await user_operator.get_expired_users(db, expired_after, expired_before, admin_username)
 
 
 @router.delete("s/expired", response_model=RemoveUsersResponse)
 async def delete_expired_users(
     db: AsyncSession = Depends(get_db),
-    admin: AdminDetails = Depends(get_current),
+    admin: AdminDetails = Depends(check_sudo_admin),
+    admin_username: str | None = None,
     expired_after: dt | None = Query(None, example="2024-01-01T00:00:00+03:30"),
     expired_before: dt | None = Query(None, example="2024-01-31T23:59:59+03:30"),
 ):
@@ -249,7 +285,9 @@ async def delete_expired_users(
     - **expired_before** UTC datetime (optional)
     - At least one of expired_after or expired_before must be provided
     """
-    return await user_operator.delete_expired_users(db, admin, expired_after, expired_before)
+    return await user_operator.delete_expired_users(
+        db, admin, expired_after, expired_before, admin_username=admin_username
+    )
 
 
 @router.post("/from_template", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
@@ -307,3 +345,14 @@ async def bulk_modify_users_datalimit(
     - **group_ids**: Optional list of group IDs to filter users by their group membership
     """
     return await user_operator.bulk_modify_datalimit(db, bulk_model)
+
+
+@router.post(
+    "s/bulk/proxy_settings", summary="Bulk modify users proxy settings", response_description="Success confirmation"
+)
+async def bulk_modify_users_proxy_settings(
+    bulk_model: BulkUsersProxy,
+    db: AsyncSession = Depends(get_db),
+    _: AdminDetails = Depends(check_sudo_admin),
+):
+    return await user_operator.bulk_modify_proxy_settings(db, bulk_model)

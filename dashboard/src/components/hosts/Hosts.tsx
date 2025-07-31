@@ -56,7 +56,7 @@ export interface HostFormValues {
   id?: number
   remark: string
   address: string
-  port: number
+  port?: number
   inbound_tag: string
   status: ('active' | 'disabled' | 'limited' | 'expired' | 'on_hold')[]
   host?: string
@@ -76,6 +76,11 @@ export interface HostFormValues {
       packets?: string
       length?: string
       interval?: string
+    }
+    sing_box?: {
+      fragment: boolean
+      fragment_fallback_delay: string
+      record_fragment: boolean
     }
   }
   noise_settings?: {
@@ -303,6 +308,7 @@ export const HostFormSchema = z.object({
   use_sni_as_host: z.boolean().default(false),
   priority: z.number().default(0),
   is_disabled: z.boolean().default(false),
+  ech_config_list: z.string().optional(),
   fragment_settings: z
     .object({
       xray: z
@@ -310,6 +316,13 @@ export const HostFormSchema = z.object({
           packets: z.string().optional(),
           length: z.string().optional(),
           interval: z.string().optional(),
+        })
+        .optional(),
+      sing_box: z
+        .object({
+          fragment: z.boolean().optional(),
+          fragment_fallback_delay: z.string().optional(),
+          record_fragment: z.boolean().optional(),
         })
         .optional(),
     })
@@ -385,7 +398,7 @@ export const HostFormSchema = z.object({
 const initialDefaultValues: HostFormValues = {
   remark: '',
   address: '',
-  port: 443,
+  port: undefined,
   inbound_tag: '',
   status: [],
   host: '',
@@ -416,11 +429,13 @@ export interface HostsProps {
 export default function Hosts({ data, onAddHost, isDialogOpen, onSubmit, editingHost, setEditingHost }: HostsProps) {
   const [hosts, setHosts] = useState<BaseHost[] | undefined>()
   const [debouncedHosts, setDebouncedHosts] = useState<BaseHost[] | undefined>([])
+  const [skipNextDebounce, setSkipNextDebounce] = useState(false)
   const { t } = useTranslation()
 
   // Set up hosts data from props
   useEffect(() => {
     setHosts(data ?? [])
+    setSkipNextDebounce(true)
   }, [data])
 
   const form = useForm<HostFormValues>({
@@ -441,7 +456,7 @@ export default function Hosts({ data, onAddHost, isDialogOpen, onSubmit, editing
     const formData: HostFormValues = {
       remark: host.remark || '',
       address: host.address || '',
-      port: host.port ? Number(host.port) : 443,
+      port: host.port ? Number(host.port) : undefined,
       inbound_tag: host.inbound_tag || '',
       status: host.status || [],
       host: host.host || '',
@@ -456,9 +471,11 @@ export default function Hosts({ data, onAddHost, isDialogOpen, onSubmit, editing
       use_sni_as_host: host.use_sni_as_host || false,
       priority: host.priority || 0,
       is_disabled: host.is_disabled || false,
+      ech_config_list: host.ech_config_list || undefined,
       fragment_settings: host.fragment_settings
         ? {
             xray: host.fragment_settings.xray ?? undefined,
+            sing_box: host.fragment_settings.sing_box ?? undefined,
           }
         : undefined,
       noise_settings: host.noise_settings
@@ -472,8 +489,8 @@ export default function Hosts({ data, onAddHost, isDialogOpen, onSubmit, editing
               ? {
                   enable: host.mux_settings.xray.enable ?? false,
                   concurrency: host.mux_settings.xray.concurrency ?? null,
-                  xudp_concurrency: host.mux_settings.xray.xudp_concurrency ?? null,
-                  xudp_proxy_443: host.mux_settings.xray.xudp_proxy_443 ?? 'reject',
+                  xudp_concurrency: host.mux_settings.xray.xudpConcurrency ?? null,
+                  xudp_proxy_443: host.mux_settings.xray.xudpProxyUDP443 ?? 'reject',
                 }
               : undefined,
             sing_box: host.mux_settings.sing_box
@@ -511,8 +528,6 @@ export default function Hosts({ data, onAddHost, isDialogOpen, onSubmit, editing
                   x_padding_bytes: host.transport_settings.xhttp_settings.x_padding_bytes ?? undefined,
                   sc_max_each_post_bytes: host.transport_settings.xhttp_settings.sc_max_each_post_bytes ?? undefined,
                   sc_min_posts_interval_ms: host.transport_settings.xhttp_settings.sc_min_posts_interval_ms ?? undefined,
-                  sc_max_buffered_posts: host.transport_settings.xhttp_settings.sc_max_buffered_posts ?? undefined,
-                  sc_stream_up_server_secs: host.transport_settings.xhttp_settings.sc_stream_up_server_secs ?? undefined,
                   download_settings: host.transport_settings.xhttp_settings.download_settings ?? undefined,
                 }
               : undefined,
@@ -635,8 +650,7 @@ export default function Hosts({ data, onAddHost, isDialogOpen, onSubmit, editing
       toast.error(t('host.duplicateFailed', { name: host.remark || '' }))
     }
   }
-
-  const cleanEmptyValues = (obj: any) => {
+const cleanEmptyValues = (obj: any) => {
     if (!obj) return undefined
     const cleaned: any = {}
     for (const [key, value] of Object.entries(obj)) {
@@ -655,11 +669,25 @@ export default function Hosts({ data, onAddHost, isDialogOpen, onSubmit, editing
     return Object.keys(cleaned).length > 0 ? cleaned : undefined
   }
 
+
   const handleSubmit = async (data: HostFormValues) => {
     try {
       // Clean up the data before submission
       const cleanedData = {
         ...data,
+        fragment_settings: data.fragment_settings
+          ? {
+              xray:
+                data.fragment_settings.xray && (data.fragment_settings.xray.packets || data.fragment_settings.xray.length || data.fragment_settings.xray.interval)
+                  ? data.fragment_settings.xray
+                  : undefined,
+              sing_box:
+                data.fragment_settings.sing_box &&
+                (data.fragment_settings.sing_box.fragment || data.fragment_settings.sing_box.fragment_fallback_delay || data.fragment_settings.sing_box.record_fragment)
+                  ? data.fragment_settings.sing_box
+                  : undefined,
+            }
+          : undefined,
         mux_settings: data.mux_settings
           ? {
               xray: data.mux_settings.xray
@@ -673,6 +701,11 @@ export default function Hosts({ data, onAddHost, isDialogOpen, onSubmit, editing
               clash: data.mux_settings.clash && data.mux_settings.clash.protocol !== 'none' ? data.mux_settings.clash : undefined,
             }
           : undefined,
+      }
+
+      // Remove fragment_settings if it's empty
+      if (cleanedData.fragment_settings && !cleanedData.fragment_settings.xray && !cleanedData.fragment_settings.sing_box) {
+        delete cleanedData.fragment_settings
       }
 
       // Remove mux_settings if it's empty
@@ -726,6 +759,10 @@ export default function Hosts({ data, onAddHost, isDialogOpen, onSubmit, editing
 
   // Debounce the host updates to prevent too many API calls
   useEffect(() => {
+    if (skipNextDebounce) {
+      setSkipNextDebounce(false)
+      return
+    }
     const handler = setTimeout(() => {
       setDebouncedHosts(hosts)
     }, 1500)
@@ -769,7 +806,7 @@ export default function Hosts({ data, onAddHost, isDialogOpen, onSubmit, editing
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={sortableHosts} strategy={rectSortingStrategy}>
             <div className="max-w-screen-[2000px] min-h-screen overflow-hidden">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {sortedHosts.map(host => (
                   <SortableHost key={host.id ?? 'new'} host={host} onEdit={handleEdit} onDuplicate={handleDuplicate} onDataChanged={refreshHostsData} />
                 ))}

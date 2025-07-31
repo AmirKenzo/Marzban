@@ -91,7 +91,7 @@ class AdminUsageLogs(Base):
     admin_id: Mapped[int] = mapped_column(ForeignKey("admins.id"))
     admin: Mapped["Admin"] = relationship(back_populates="usage_logs", init=False)
     used_traffic_at_reset: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    reset_at: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: dt.now(tz.utc))
+    reset_at: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: dt.now(tz.utc), init=False)
 
 
 class ReminderType(str, Enum):
@@ -127,6 +127,9 @@ class User(Base):
     notification_reminders: Mapped[List["NotificationReminder"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", init=False
     )
+    subscription_updates: Mapped[List["UserSubscriptionUpdate"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", init=False
+    )
     usage_logs: Mapped[List["UserUsageResetLogs"]] = relationship(back_populates="user", init=False)
     admin: Mapped["Admin"] = relationship(back_populates="users", init=False)
     next_plan: Mapped[Optional["NextPlan"]] = relationship(
@@ -144,8 +147,6 @@ class User(Base):
     _expire: Mapped[Optional[dt]] = mapped_column("expire", DateTime(timezone=True), default=None, init=False)
     admin_id: Mapped[Optional[int]] = mapped_column(ForeignKey("admins.id"), default=None)
     sub_revoked_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), default=None)
-    sub_updated_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), default=None)
-    sub_last_user_agent: Mapped[Optional[str]] = mapped_column(String(512), default=None)
     note: Mapped[Optional[str]] = mapped_column(String(500), default=None)
     online_at: Mapped[Optional[dt]] = mapped_column(DateTime(timezone=True), default=None)
     on_hold_expire_duration: Mapped[Optional[int]] = mapped_column(BigInteger, default=None)
@@ -276,6 +277,16 @@ class User(Base):
         return case((cls.expire.isnot(None), func.floor(DaysDiff())), else_=0)
 
 
+class UserSubscriptionUpdate(Base):
+    __tablename__ = "user_subscription_updates"
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user: Mapped["User"] = relationship(back_populates="subscription_updates", init=False)
+    created_at: Mapped[dt] = mapped_column(DateTime(timezone=True), default=lambda: dt.now(tz.utc), init=False)
+    user_agent: Mapped[str] = mapped_column(String(512))
+
+
 template_group_association = Table(
     "template_group_association",
     Base.metadata,
@@ -391,6 +402,8 @@ ProxyHostFingerprint = Enum(
         "qq": "qq",
         "random": "random",
         "randomized": "randomized",
+        "randomizednoalpn": "randomizednoalpn",
+        "unsafe": "unsafe",
     },
 )
 
@@ -436,7 +449,10 @@ class ProxyHost(Base):
     http_headers: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON(none_as_null=True), default=None)
     transport_settings: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON(none_as_null=True), default=None)
     mux_settings: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON(none_as_null=True), default=None)
-    status: Mapped[List[UserStatus]] = mapped_column(EnumArray(UserStatus), default=list, server_default="[]")
+    status: Mapped[Optional[list[UserStatus]]] = mapped_column(
+        EnumArray(UserStatus, 60), default=list, server_default=""
+    )
+    ech_config_list: Mapped[Optional[str]] = mapped_column(String(512), default=None)
 
 
 class System(Base):
@@ -452,14 +468,6 @@ class JWT(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     secret_key: Mapped[str] = mapped_column(String(64), default=lambda: os.urandom(32).hex())
-
-
-class TLS(Base):
-    __tablename__ = "tls"
-
-    id: Mapped[int] = mapped_column(primary_key=True, init=False)
-    key: Mapped[str] = mapped_column(String(4096), nullable=False)
-    certificate: Mapped[str] = mapped_column(String(2048), nullable=False)
 
 
 class NodeConnectionType(str, Enum):
@@ -612,3 +620,4 @@ class Settings(Base):
     notification_settings: Mapped[dict] = mapped_column(JSON())
     notification_enable: Mapped[dict] = mapped_column(JSON())
     subscription: Mapped[dict] = mapped_column(JSON())
+    general: Mapped[dict] = mapped_column(JSON())
